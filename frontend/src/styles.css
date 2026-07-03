@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+@theme {
+  --color-forest-950: #05130d;
+  --color-forest-900: #082117;
+  --color-forest-800: #103822;
+  --color-forest-700: #145232;
+  --color-forest-500: #29a36a;
+  --color-forest-400: #61d394;
+  --font-display: Inter, Tahoma, Arial, sans-serif;
+  --font-arabic: Tahoma, Arial, sans-serif;
+  --shadow-glow: 0 20px 80px rgba(41, 163, 106, 0.25);
+}
+
+:root {
+  color: #f8fafc;
+  background: #05130d;
+  font-family: Inter, Tahoma, Arial, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background: #082117;
+  color: #f8fafc;
+}
+
+select option:checked,
+select option:hover {
+  background: #145232;
+  color: #ffffff;
+}
+
+[dir="rtl"] body {
+  font-family: Tahoma, Arial, sans-serif;
+}
+
+.hero-bg {
+  background:
+    linear-gradient(115deg, rgba(5, 19, 13, 0.96), rgba(8, 33, 23, 0.76) 42%, rgba(5, 19, 13, 0.2)),
+    url("https://images.unsplash.com/photo-1748460078692-acb877cb6c21?auto=format&fit=crop&w=2200&q=85");
+  background-position: center;
+  background-size: cover;
+}
+
+.glass {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(6, 24, 16, 0.74);
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(22px);
+}
+
+.soft-card {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.04));
+}
+
+.leaflet-interactive.route-line-hit {
+  cursor: pointer;
+}
+
+.point-info-tip.leaflet-tooltip,
+.point-info-popup .leaflet-popup-content {
+  max-width: 250px;
+  white-space: normal;
+}
+
+.leaflet-marker-icon {
+  cursor: pointer;
+}
+
+.point-info-tip.leaflet-tooltip {
+  padding: 10px 12px;
+  border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
+}
+
+.point-info-popup img {
+  width: 100%;
+  border-radius: 8px;
+}
+
+.point-popup-image-btn {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.point-popup-image-btn:hover .point-popup-image {
+  opacity: 0.92;
+  outline: 2px solid #29a36a;
+  outline-offset: 2px;
+}
+
+.map-enlarge-btn {
+  pointer-events: auto;
+}
+
+.route-map-modal-panel .leaflet-container {
+  height: 100%;
+  width: 100%;
+  border-radius: 0;
+  background: #0a1f14;
+}
+
+.route-map-modal .leaflet-popup-pane {
+  z-index: 900;
+}
+
+.animate-float {
+  animation: float 5s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-16px);
+  }
+}
