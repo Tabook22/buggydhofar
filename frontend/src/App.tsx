@@ -9,6 +9,7 @@ import ContactPage from "./pages/ContactPage";
 import AdminDashboard from "./pages/AdminDashboard";
 
 const StaffCheckInPage = lazy(() => import("./pages/StaffCheckInPage"));
+const AdminVerifyBookingPage = lazy(() => import("./pages/AdminVerifyBookingPage"));
 
 export default function App() {
   return (
@@ -21,6 +22,14 @@ export default function App() {
         element={
           <Suspense fallback={null}>
             <StaffCheckInPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/admin/verify/:token"
+        element={
+          <Suspense fallback={null}>
+            <AdminVerifyBookingPage />
           </Suspense>
         }
       />

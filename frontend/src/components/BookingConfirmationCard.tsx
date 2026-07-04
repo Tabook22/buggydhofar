@@ -65,7 +65,7 @@ export function BookingConfirmationCard({ booking, routeName, onRedirect }: Book
               [t("booking.buggyBike"), bikesLabel],
               [t("booking.total"), `${booking.total_price} ${t("booking.omr")}`],
               [t("booking.payment"), paymentLabel(booking.payment_method, t)],
-              [t("admin.status"), booking.booking_status]
+              [t("booking.bookingStatus"), booking.booking_status === "paid" ? t("booking.statusConfirmed") : booking.booking_status === "cancelled" ? t("booking.statusCancelled") : t("booking.statusPending")]
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between gap-4 border-b border-white/5 pb-2">
                 <dt className="text-white/55">{label}</dt>
@@ -76,8 +76,8 @@ export function BookingConfirmationCard({ booking, routeName, onRedirect }: Book
         </div>
 
         <div className="flex flex-col items-center">
-          <p className="mb-4 text-center text-sm font-bold text-forest-300">{t("booking.qrTitle")}</p>
-          {booking.check_in_url && <BookingQrCode checkInUrl={booking.check_in_url} size={200} />}
+          <p className="mb-4 text-center text-sm font-bold text-forest-300">{t("booking.passQrTitle")}</p>
+          {booking.check_in_url && <BookingQrCode checkInUrl={booking.check_in_url} size={200} hintKey="booking.passQrHint" />}
         </div>
       </div>
 

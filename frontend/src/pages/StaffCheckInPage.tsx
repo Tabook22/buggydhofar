@@ -38,7 +38,7 @@ export default function StaffCheckInPage() {
             const parsed = parseCheckInToken(decodedText);
             if (parsed) {
               scanner.stop().catch(() => undefined);
-              navigate(`/checkin/${parsed}`);
+              navigate(`/admin/verify/${parsed}`);
             }
           },
           () => undefined
@@ -65,7 +65,7 @@ export default function StaffCheckInPage() {
     event.preventDefault();
     const parsed = parseCheckInToken(manualToken);
     if (parsed) {
-      navigate(`/checkin/${parsed}`);
+      navigate(`/admin/verify/${parsed}`);
       return;
     }
     setScanError(t("checkIn.invalidCode"));
