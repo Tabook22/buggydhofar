@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from . import models
 from .auth import hash_password
 
+FLEET_DEFAULT_SIZE = 20
+
 VEHICLES = [
     {
         "name_en": "1 Seat Buggy",
@@ -165,6 +167,33 @@ def seed_payment_transfer_defaults(db: Session) -> None:
         db.commit()
 
 
+def normalize_fleet_size(db: Session) -> int:
+    """Keep fleet at FLEET_DEFAULT_SIZE bikes; drop unused extras or deactivate if booked."""
+    units = db.query(models.FleetUnit).order_by(models.FleetUnit.unit_number).all()
+    if len(units) <= FLEET_DEFAULT_SIZE:
+        return 0
+
+    changed = 0
+    for unit in units[FLEET_DEFAULT_SIZE:]:
+        has_bike_rows = (
+            db.query(models.BookingBike.id).filter(models.BookingBike.fleet_unit_id == unit.id).first() is not None
+        )
+        has_legacy = (
+            db.query(models.Booking.id).filter(models.Booking.fleet_unit_id == unit.id).first() is not None
+        )
+        if has_bike_rows or has_legacy:
+            if unit.is_active:
+                unit.is_active = False
+                changed += 1
+            continue
+        db.delete(unit)
+        changed += 1
+
+    if changed:
+        db.commit()
+    return changed
+
+
 def seed_database(db: Session) -> None:
     if db.query(models.Vehicle).count() == 0:
         db.add_all(models.Vehicle(**vehicle) for vehicle in VEHICLES)
@@ -196,7 +225,8 @@ def seed_database(db: Session) -> None:
                 name_ar=f"دراجة باجي #{number}",
                 is_active=True,
             )
-            for number in range(1, 25)
+            for number in range(1, FLEET_DEFAULT_SIZE + 1)
         )
 
+    normalize_fleet_size(db)
     db.commit()

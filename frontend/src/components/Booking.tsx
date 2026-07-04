@@ -3,9 +3,16 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   api,
-  calculateBuggyPrice,
+  bikesRequiredForPassengers,
+  BookingMode,
+  calculateBookingTotal,
+  calculateSubtotal,
+  calculateTax,
+  calculateTotalWithTax,
   FleetUnitAvailability,
+  maxPassengersForAvailableBikes,
   RouteExperience,
+  TAX_PERCENT,
   Vehicle
 } from "../api/client";
 import { FleetBikeGrid } from "./FleetBikeGrid";
@@ -16,13 +23,21 @@ export type BookingSelection = {
   time: string;
   vehicleId: number;
   routeId: number;
-  fleetUnitId: number;
+  fleetUnitIds: number[];
   passengers: number;
+  bookingMode: BookingMode;
 };
 
 export function calculateTotal(selection: BookingSelection) {
-  if (!selection.fleetUnitId) return 0;
-  return calculateBuggyPrice(selection.passengers);
+  if (!selection.fleetUnitIds.length) return 0;
+  return calculateBookingTotal(selection.passengers, selection.bookingMode);
+}
+
+export function bookingPriceSummary(selection: BookingSelection) {
+  const subtotal = calculateSubtotal(selection.passengers, selection.bookingMode);
+  const tax = calculateTax(subtotal);
+  const total = calculateTotalWithTax(subtotal);
+  return { subtotal, tax, total };
 }
 
 function localizedName(item: Vehicle | RouteExperience | FleetUnitAvailability, language: string) {
@@ -31,6 +46,23 @@ function localizedName(item: Vehicle | RouteExperience | FleetUnitAvailability, 
 
 function defaultBuggyVehicle(vehicles: Vehicle[]) {
   return vehicles.find((vehicle) => vehicle.type === "buggy" && vehicle.seats === 2) || vehicles.find((vehicle) => vehicle.type === "buggy") || vehicles[0];
+}
+
+function syncFleetSelection(
+  currentIds: number[],
+  fleetUnits: FleetUnitAvailability[],
+  bikesNeeded: number
+) {
+  const availableIds = new Set(fleetUnits.filter((unit) => unit.is_available).map((unit) => unit.id));
+  const kept = currentIds.filter((id) => availableIds.has(id)).slice(0, bikesNeeded);
+  const next = [...kept];
+  for (const unit of fleetUnits) {
+    if (next.length >= bikesNeeded) break;
+    if (unit.is_available && !next.includes(unit.id)) {
+      next.push(unit.id);
+    }
+  }
+  return next;
 }
 
 export function BookingSummaryCard({
@@ -45,23 +77,32 @@ export function BookingSummaryCard({
   showButton?: boolean;
 }) {
   const { t, i18n } = useTranslation();
-  const [fleetUnit, setFleetUnit] = useState<FleetUnitAvailability | null>(null);
+  const [fleetUnits, setFleetUnits] = useState<FleetUnitAvailability[]>([]);
   const vehicle = vehicles.find((item) => item.id === selection.vehicleId);
   const route = routes.find((item) => item.id === selection.routeId);
-  const total = calculateTotal(selection);
+  const prices = bookingPriceSummary(selection);
+  const total = selection.fleetUnitIds.length ? prices.total : 0;
+  const bikesNeeded = bikesRequiredForPassengers(selection.passengers, selection.bookingMode);
+  const selectedUnits = fleetUnits.filter((unit) => selection.fleetUnitIds.includes(unit.id));
 
   useEffect(() => {
-    if (!selection.date || !selection.time || !selection.fleetUnitId) {
-      setFleetUnit(null);
+    if (!selection.date || !selection.time || selection.fleetUnitIds.length === 0) {
+      setFleetUnits([]);
       return;
     }
     api
       .getFleetAvailability(selection.date, selection.time)
-      .then((data) => setFleetUnit(data.units.find((unit) => unit.id === selection.fleetUnitId) || null))
-      .catch(() => setFleetUnit(null));
-  }, [selection.date, selection.time, selection.fleetUnitId]);
+      .then((data) => setFleetUnits(data.units))
+      .catch(() => setFleetUnits([]));
+  }, [selection.date, selection.time, selection.fleetUnitIds]);
 
   const canContinue = isBookingSelectionReady(selection);
+  const bikeLabel =
+    selectedUnits.length > 0
+      ? selectedUnits.map((unit) => `#${unit.unit_number}`).join(", ")
+      : selection.fleetUnitIds.length > 0
+        ? selection.fleetUnitIds.map((id) => `#${id}`).join(", ")
+        : "-";
 
   return (
     <aside className="glass sticky top-28 rounded-[2rem] p-6">
@@ -76,13 +117,18 @@ export function BookingSummaryCard({
           <dd className="font-semibold">{selection.time || "-"}</dd>
         </div>
         <div className="flex justify-between gap-4 border-b border-white/10 pb-3">
-          <dt className="text-white/60">{t("booking.buggyBike")}</dt>
+          <dt className="text-white/60">{t("booking.bookingMode")}</dt>
           <dd className="font-semibold">
-            {fleetUnit
-              ? `#${fleetUnit.unit_number}`
-              : selection.fleetUnitId
-                ? `#${selection.fleetUnitId}`
-                : "-"}
+            {selection.bookingMode === "individual" ? t("booking.modeIndividual") : t("booking.modeGroup")}
+          </dd>
+        </div>
+        <div className="flex justify-between gap-4 border-b border-white/10 pb-3">
+          <dt className="text-white/60">{t("booking.bikes")}</dt>
+          <dd className="max-w-[55%] text-end font-semibold">
+            {bikeLabel}
+            <span className="mt-1 block text-xs text-white/45">
+              {t("booking.bikesNeeded", { count: bikesNeeded })}
+            </span>
           </dd>
         </div>
         <div className="flex justify-between gap-4 border-b border-white/10 pb-3">
@@ -93,12 +139,31 @@ export function BookingSummaryCard({
           <dt className="text-white/60">{t("booking.passengers")}</dt>
           <dd className="font-semibold">{selection.passengers}</dd>
         </div>
+        {selection.fleetUnitIds.length > 0 && (
+          <>
+            <div className="flex justify-between gap-4 border-b border-white/10 pb-3 text-sm">
+              <dt className="text-white/60">{t("booking.subtotal")}</dt>
+              <dd className="font-semibold">
+                {prices.subtotal.toFixed(2)} {t("booking.omr")}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4 border-b border-white/10 pb-3 text-sm">
+              <dt className="text-white/60">{t("booking.tax", { percent: TAX_PERCENT })}</dt>
+              <dd className="font-semibold">
+                {prices.tax.toFixed(2)} {t("booking.omr")}
+              </dd>
+            </div>
+          </>
+        )}
         <div className="flex items-end justify-between gap-4 pt-2">
-          <dt className="text-white/60">{t("booking.total")}</dt>
+          <dt className="text-white/60">{t("booking.totalInclTax")}</dt>
           <dd className="text-3xl font-black text-forest-400">
-            {total} {t("booking.omr")}
+            {total.toFixed(2)} {t("booking.omr")}
           </dd>
         </div>
+        {selection.fleetUnitIds.length > 0 && (
+          <p className="mt-2 text-xs text-white/45">{t("booking.taxNote", { percent: TAX_PERCENT })}</p>
+        )}
       </dl>
       {vehicle && (
         <p className="mt-4 text-xs text-white/45">
@@ -147,6 +212,9 @@ export function BookingWidget({
 
   const sortedRoutes = useMemo(() => routes.filter((route) => route.display_on_home !== false), [routes]);
   const defaultVehicle = useMemo(() => defaultBuggyVehicle(vehicles.filter((vehicle) => vehicle.is_available)), [vehicles]);
+  const availableUnits = fleetUnits.filter((unit) => unit.is_available);
+  const bikesNeeded = bikesRequiredForPassengers(selection.passengers, selection.bookingMode);
+  const maxPassengers = Math.max(1, maxPassengersForAvailableBikes(availableUnits.length, selection.bookingMode));
 
   useEffect(() => {
     api.getTimeSlots().then((data) => setTimeSlots(data.slots)).catch(() => undefined);
@@ -186,18 +254,27 @@ export function BookingWidget({
   }, [selection.date, selection.time, t]);
 
   useEffect(() => {
-    if (!selection.date || !selection.time || fleetLoading || fleetUnits.length === 0) return;
-
-    if (selection.fleetUnitId) {
-      const stillAvailable = fleetUnits.some((unit) => unit.id === selection.fleetUnitId && unit.is_available);
-      if (stillAvailable) return;
-    }
-
-    const firstOpen = fleetUnits.find((unit) => unit.is_available);
-    const nextFleetUnitId = firstOpen?.id || 0;
-    if (nextFleetUnitId === selection.fleetUnitId) return;
-    onChange({ ...selection, fleetUnitId: nextFleetUnitId });
-  }, [fleetUnits, fleetLoading, selection.date, selection.time, selection.fleetUnitId, onChange, selection]);
+    if (!selection.date || !selection.time || fleetLoading) return;
+    const nextIds = syncFleetSelection(selection.fleetUnitIds, fleetUnits, bikesNeeded);
+    const cappedPassengers = Math.min(Math.max(selection.passengers, 1), Math.max(1, maxPassengers));
+    const patch: Partial<BookingSelection> = {};
+    if (nextIds.join(",") !== selection.fleetUnitIds.join(",")) patch.fleetUnitIds = nextIds;
+    if (cappedPassengers !== selection.passengers) patch.passengers = cappedPassengers;
+    if (Object.keys(patch).length) onChange({ ...selection, ...patch });
+  }, [
+    fleetUnits,
+    fleetLoading,
+    selection.date,
+    selection.time,
+    bikesNeeded,
+    maxPassengers,
+    selection.bookingMode,
+    availableUnits.length,
+    selection.fleetUnitIds,
+    selection.passengers,
+    onChange,
+    selection
+  ]);
 
   useEffect(() => {
     const patch: Partial<BookingSelection> = {};
@@ -207,20 +284,72 @@ export function BookingWidget({
     onChange({ ...selection, ...patch });
   }, [defaultVehicle, sortedRoutes, selection.vehicleId, selection.routeId, onChange, selection]);
 
-  const availableUnits = fleetUnits.filter((unit) => unit.is_available);
+  function changeMode(mode: BookingMode) {
+    if (mode === selection.bookingMode) return;
+    const cap = Math.max(1, maxPassengersForAvailableBikes(availableUnits.length, mode));
+    const passengers = Math.min(Math.max(selection.passengers, 1), cap);
+    const needed = bikesRequiredForPassengers(passengers, mode);
+    update({
+      bookingMode: mode,
+      passengers,
+      fleetUnitIds: syncFleetSelection(selection.fleetUnitIds, fleetUnits, needed)
+    });
+  }
+
+  function toggleFleetUnit(fleetUnitId: number) {
+    const isSelected = selection.fleetUnitIds.includes(fleetUnitId);
+    if (isSelected) {
+      update({ fleetUnitIds: selection.fleetUnitIds.filter((id) => id !== fleetUnitId) });
+      return;
+    }
+    if (selection.fleetUnitIds.length >= bikesNeeded) return;
+    update({ fleetUnitIds: [...selection.fleetUnitIds, fleetUnitId] });
+  }
+
+  function changePassengers(rawValue: number) {
+    const passengers = Math.min(Math.max(1, rawValue), maxPassengers);
+    const needed = bikesRequiredForPassengers(passengers, selection.bookingMode);
+    update({
+      passengers,
+      fleetUnitIds: syncFleetSelection(selection.fleetUnitIds, fleetUnits, needed)
+    });
+  }
+
+  const modeButtonClass = (active: boolean) =>
+    [
+      "rounded-2xl border px-4 py-4 text-start transition",
+      active
+        ? "border-forest-400 bg-forest-500/25 text-white ring-2 ring-forest-400/40"
+        : "border-white/10 bg-white/5 text-white/70 hover:border-white/20 hover:bg-white/10"
+    ].join(" ");
+
+  const selectionReady = selection.fleetUnitIds.length === bikesNeeded && bikesNeeded <= availableUnits.length;
 
   return (
     <div className="glass rounded-[2rem] p-6 md:p-8">
       <p className="text-sm font-bold uppercase tracking-[0.3em] text-forest-400">{t("booking.quickTitle")}</p>
       <h2 className="mt-3 text-3xl font-black">{t("booking.quickSubtitle")}</h2>
       <div className="mt-8 grid gap-4 md:grid-cols-2">
+        <div className="space-y-2 md:col-span-2">
+          <span className="text-sm font-semibold text-white/75">{t("booking.bookingMode")}</span>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button type="button" className={modeButtonClass(selection.bookingMode === "group")} onClick={() => changeMode("group")}>
+              <span className="block font-bold">{t("booking.modeGroup")}</span>
+              <span className="mt-1 block text-xs text-white/55">{t("booking.modeGroupHelp")}</span>
+            </button>
+            <button type="button" className={modeButtonClass(selection.bookingMode === "individual")} onClick={() => changeMode("individual")}>
+              <span className="block font-bold">{t("booking.modeIndividual")}</span>
+              <span className="mt-1 block text-xs text-white/55">{t("booking.modeIndividualHelp")}</span>
+            </button>
+          </div>
+        </div>
         <label className="space-y-2">
           <span className="text-sm font-semibold text-white/75">{t("booking.selectDate")}</span>
-          <input className={fieldClass} type="date" value={selection.date} min={new Date().toISOString().slice(0, 10)} onChange={(event) => update({ date: event.target.value, fleetUnitId: 0 })} />
+          <input className={fieldClass} type="date" value={selection.date} min={new Date().toISOString().slice(0, 10)} onChange={(event) => update({ date: event.target.value, fleetUnitIds: [] })} />
         </label>
         <label className="space-y-2">
           <span className="text-sm font-semibold text-white/75">{t("booking.selectTime")}</span>
-          <select className={fieldClass} value={selection.time} onChange={(event) => update({ time: event.target.value, fleetUnitId: 0 })}>
+          <select className={fieldClass} value={selection.time} onChange={(event) => update({ time: event.target.value, fleetUnitIds: [] })}>
             <option value="">{t("booking.selectTime")}</option>
             {timeSlots.map((time) => (
               <option key={time} value={time}>
@@ -229,16 +358,23 @@ export function BookingWidget({
             ))}
           </select>
         </label>
-        <div className="space-y-2 md:col-span-2">
-          <span className="text-sm font-semibold text-white/75">{t("booking.buggyBike")}</span>
-          <FleetBikeGrid
-            units={fleetUnits}
-            selectedId={selection.fleetUnitId}
-            loading={fleetLoading}
-            onSelect={(fleetUnitId) => update({ fleetUnitId })}
+        <label className="space-y-2">
+          <span className="text-sm font-semibold text-white/75">{t("booking.passengers")}</span>
+          <input
+            className={fieldClass}
+            type="number"
+            min={1}
+            max={maxPassengers}
+            value={selection.passengers}
+            onChange={(event) => changePassengers(Number(event.target.value))}
           />
-          <p className={`text-sm ${availableUnits.length ? "text-forest-300" : "text-red-300"}`}>{availabilityMessage}</p>
-        </div>
+          <p className="text-xs text-white/50">
+            {selection.bookingMode === "individual"
+              ? t("booking.bikesNeededIndividual", { count: bikesNeeded })
+              : t("booking.bikesNeeded", { count: bikesNeeded })}
+            {maxPassengers < 40 && ` · ${t("booking.maxPassengersHint", { count: maxPassengers })}`}
+          </p>
+        </label>
         <label className="space-y-2">
           <span className="text-sm font-semibold text-white/75">{t("booking.route")}</span>
           <select className={fieldClass} value={selection.routeId || ""} onChange={(event) => update({ routeId: Number(event.target.value) })}>
@@ -250,13 +386,23 @@ export function BookingWidget({
             ))}
           </select>
         </label>
-        <label className="space-y-2">
-          <span className="text-sm font-semibold text-white/75">{t("booking.passengers")}</span>
-          <select className={fieldClass} value={selection.passengers} onChange={(event) => update({ passengers: Number(event.target.value) })}>
-            <option value={1}>{t("booking.onePassenger")} — 24 {t("booking.omr")}</option>
-            <option value={2}>{t("booking.twoPassengers")} — 30 {t("booking.omr")}</option>
-          </select>
-        </label>
+        <div className="space-y-2 md:col-span-2">
+          <span className="text-sm font-semibold text-white/75">{t("booking.selectBikes")}</span>
+          <FleetBikeGrid
+            units={fleetUnits}
+            selectedIds={selection.fleetUnitIds}
+            maxSelectable={bikesNeeded}
+            loading={fleetLoading}
+            onToggle={toggleFleetUnit}
+          />
+          <p className={`text-sm ${selectionReady && availableUnits.length ? "text-forest-300" : "text-red-300"}`}>
+            {selectionReady
+              ? availabilityMessage
+              : availableUnits.length < bikesNeeded
+                ? t("booking.notEnoughBikes", { needed: bikesNeeded, available: availableUnits.length })
+                : t("booking.selectMoreBikes", { selected: selection.fleetUnitIds.length, required: bikesNeeded })}
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import os
 
 try:
     from dotenv import load_dotenv
@@ -12,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import extract, func, text
 from sqlalchemy.orm import Session
 
-from . import auth, booking_archive, booking_lifecycle, booking_numbers, email_service, fleet, models, pricing, routes_geo, schemas
+from . import auth, booking_archive, booking_lifecycle, booking_numbers, booking_qr, email_service, fleet, models, pricing, routes_geo, schemas, waiver
 from .database import Base, SessionLocal, engine, get_db
 from .seed import seed_database, seed_payment_transfer_defaults
 
@@ -20,9 +21,27 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Khareef Adventure Booking API")
 
+_DEFAULT_CORS_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://buggydhofar.com",
+    "https://www.buggydhofar.com",
+    "http://buggydhofar.com",
+    "http://www.buggydhofar.com",
+]
+
+
+def _cors_origins() -> list[str]:
+    extra = os.getenv("CORS_ORIGINS", "")
+    origins = list(_DEFAULT_CORS_ORIGINS)
+    if extra.strip():
+        origins.extend(part.strip() for part in extra.split(",") if part.strip())
+    return origins
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -102,18 +121,142 @@ def ensure_payment_transfer_columns() -> None:
                 connection.execute(text(f"ALTER TABLE site_content ADD COLUMN {column} {definition}"))
 
 
+def ensure_booking_mode_column() -> None:
+    with engine.begin() as connection:
+        existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(bookings)"))}
+        if "booking_mode" not in existing_columns:
+            connection.execute(text("ALTER TABLE bookings ADD COLUMN booking_mode TEXT DEFAULT 'group'"))
+
+
+def ensure_booking_tax_columns() -> None:
+    with engine.begin() as connection:
+        existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(bookings)"))}
+        if "subtotal" not in existing_columns:
+            connection.execute(text("ALTER TABLE bookings ADD COLUMN subtotal REAL"))
+        if "tax_amount" not in existing_columns:
+            connection.execute(text("ALTER TABLE bookings ADD COLUMN tax_amount REAL"))
+
+
+def ensure_booking_waiver_columns() -> None:
+    with engine.begin() as connection:
+        existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(bookings)"))}
+        columns = {
+            "national_id": "TEXT",
+            "waiver_accepted": "BOOLEAN DEFAULT 0",
+            "waiver_accepted_at": "DATETIME",
+            "waiver_text": "TEXT",
+            "waiver_language": "TEXT",
+        }
+        for column, definition in columns.items():
+            if column not in existing_columns:
+                connection.execute(text(f"ALTER TABLE bookings ADD COLUMN {column} {definition}"))
+
+
+def backfill_booking_tax(db: Session) -> int:
+    missing = db.query(models.Booking).filter(models.Booking.subtotal.is_(None)).all()
+    if not missing:
+        return 0
+    for booking in missing:
+        booking.subtotal = booking.total_price
+        booking.tax_amount = 0.0
+    db.commit()
+    return len(missing)
+
+
+def ensure_booking_check_in_columns() -> None:
+    with engine.begin() as connection:
+        existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(bookings)"))}
+        if "check_in_token" not in existing_columns:
+            connection.execute(text("ALTER TABLE bookings ADD COLUMN check_in_token TEXT"))
+        if "checked_in_at" not in existing_columns:
+            connection.execute(text("ALTER TABLE bookings ADD COLUMN checked_in_at DATETIME"))
+
+
+def backfill_check_in_tokens(db: Session) -> int:
+    missing = db.query(models.Booking).filter(models.Booking.check_in_token.is_(None)).all()
+    if not missing:
+        return 0
+    for booking in missing:
+        booking.check_in_token = booking_qr.ensure_unique_check_in_token(db)
+    db.commit()
+    return len(missing)
+
+
+def booking_check_in_out(booking: models.Booking, db: Session) -> schemas.BookingCheckInOut:
+    route = db.get(models.Route, booking.route_id)
+    units = fleet.booking_fleet_units(db, booking)
+    token = booking.check_in_token or ""
+    return schemas.BookingCheckInOut(
+        booking_id=booking.id,
+        booking_number=booking.booking_number or "",
+        customer_name=booking.customer_name,
+        phone=booking.phone,
+        email=booking.email,
+        date=booking.date,
+        time=booking.time,
+        passengers=booking.passengers,
+        bike_count=len(units) or (1 if booking.fleet_unit_id else 0),
+        fleet_unit_numbers=[unit.unit_number for unit in units],
+        route_name_en=route.name_en if route else None,
+        route_name_ar=route.name_ar if route else None,
+        booking_status=booking_lifecycle.normalize_status(booking.booking_status),
+        payment_status=booking.payment_status,
+        total_price=booking.total_price,
+        checked_in_at=booking.checked_in_at,
+        check_in_url=booking_qr.build_check_in_url(token) if token else "",
+    )
+
+
+def booking_to_out(booking: models.Booking, db: Session) -> schemas.BookingOut:
+    units = fleet.booking_fleet_units(db, booking)
+    fleet_unit_ids = [unit.id for unit in units]
+    fleet_unit_numbers = [unit.unit_number for unit in units]
+    return schemas.BookingOut(
+        id=booking.id,
+        booking_number=booking.booking_number or "",
+        customer_name=booking.customer_name,
+        phone=booking.phone,
+        email=booking.email,
+        nationality=booking.nationality,
+        hotel_location=booking.hotel_location,
+        date=booking.date,
+        time=booking.time,
+        vehicle_id=booking.vehicle_id,
+        route_id=booking.route_id,
+        fleet_unit_ids=fleet_unit_ids,
+        fleet_unit_numbers=fleet_unit_numbers,
+        bike_count=len(fleet_unit_ids) or (1 if booking.fleet_unit_id else 0),
+        booking_mode=getattr(booking, "booking_mode", None) or "group",
+        passengers=booking.passengers,
+        subtotal=booking.subtotal,
+        tax_amount=booking.tax_amount,
+        total_price=booking.total_price,
+        payment_method=booking.payment_method,
+        payment_status=booking.payment_status,
+        booking_status=booking_lifecycle.normalize_status(booking.booking_status),
+        notes=booking.notes,
+        national_id=booking.national_id,
+        waiver_accepted=bool(booking.waiver_accepted),
+        waiver_accepted_at=booking.waiver_accepted_at,
+        check_in_token=booking.check_in_token,
+        check_in_url=booking_qr.build_check_in_url(booking.check_in_token) if booking.check_in_token else None,
+        checked_in_at=booking.checked_in_at,
+        created_at=booking.created_at,
+    )
+
+
 def booking_to_admin_out(booking: models.Booking, db: Session) -> schemas.BookingAdminOut:
-    fleet_unit = db.get(models.FleetUnit, booking.fleet_unit_id) if booking.fleet_unit_id else None
     route = db.get(models.Route, booking.route_id)
     email_count = db.query(models.BookingEmailLog).filter(models.BookingEmailLog.booking_id == booking.id).count()
-    payload = schemas.BookingOut.model_validate(booking).model_dump()
-    normalized_status = booking_lifecycle.normalize_status(booking.booking_status)
-    payload["booking_status"] = normalized_status
+    base = booking_to_out(booking, db)
+    first_unit = fleet.booking_fleet_units(db, booking)
+    first = first_unit[0] if first_unit else None
     return schemas.BookingAdminOut(
-        **payload,
+        **base.model_dump(),
         confirmation_email_sent=booking_archive.booking_has_confirmation(db, booking.id),
         booking_confirmed=booking_lifecycle.is_booking_confirmed(booking.booking_status),
-        fleet_unit_number=fleet_unit.unit_number if fleet_unit else None,
+        fleet_unit_number=first.unit_number if first else None,
+        fleet_unit_id=first.id if first else booking.fleet_unit_id,
         route_name_en=route.name_en if route else None,
         email_count=email_count,
     )
@@ -132,6 +275,10 @@ def startup() -> None:
     ensure_vehicle_display_columns()
     ensure_booking_fleet_column()
     ensure_booking_number_column()
+    ensure_booking_mode_column()
+    ensure_booking_tax_columns()
+    ensure_booking_waiver_columns()
+    ensure_booking_check_in_columns()
     ensure_payment_transfer_columns()
     db = SessionLocal()
     try:
@@ -153,6 +300,9 @@ def startup() -> None:
         db.commit()
         booking_lifecycle.normalize_legacy_statuses(db)
         booking_numbers.backfill_booking_numbers(db)
+        fleet.backfill_booking_bikes(db)
+        backfill_booking_tax(db)
+        backfill_check_in_tokens(db)
         seed_payment_transfer_defaults(db)
         process_expired_pending_bookings(db)
     finally:
@@ -262,16 +412,28 @@ def create_booking(payload: schemas.BookingCreate, background_tasks: BackgroundT
     if not vehicle or not vehicle.is_available:
         raise HTTPException(status_code=400, detail="Selected vehicle type is unavailable")
 
+    booking_mode = pricing.normalize_booking_mode(payload.booking_mode)
+
     try:
-        fleet.validate_booking(db, payload.date, payload.time, payload.fleet_unit_id, payload.passengers)
+        fleet.validate_group_booking(
+            db, payload.date, payload.time, payload.fleet_unit_ids, payload.passengers, booking_mode
+        )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    expected_price = fleet.server_booking_price(payload.passengers)
+    if not payload.waiver_accepted:
+        raise HTTPException(status_code=400, detail="You must accept the liability waiver to complete your booking.")
+    national_id = payload.national_id.strip()
+    if not national_id:
+        raise HTTPException(status_code=400, detail="National / resident ID is required for the liability waiver.")
+
+    subtotal = fleet.server_booking_price(payload.passengers, booking_mode)
+    tax_amount = pricing.calculate_tax(subtotal)
+    expected_price = pricing.calculate_total_with_tax(subtotal)
     if abs(payload.total_price - expected_price) > 0.01:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid price. Expected {expected_price} OMR for {payload.passengers} passenger(s).",
+            detail=f"Invalid price. Expected {expected_price} OMR (including 5% tax) for {payload.passengers} passenger(s).",
         )
 
     user = db.query(models.User).filter(models.User.email == payload.email).first()
@@ -284,33 +446,84 @@ def create_booking(payload: schemas.BookingCreate, background_tasks: BackgroundT
         )
         db.add(user)
 
+    accepted_at = datetime.utcnow()
+    waiver_lang = "ar" if payload.waiver_language.startswith("ar") else "en"
+    waiver_body = waiver.build_waiver_text(
+        customer_name=payload.customer_name.strip(),
+        national_id=national_id,
+        phone=payload.phone.strip(),
+        email=str(payload.email),
+        ride_date=f"{payload.date} {payload.time}",
+        language=waiver_lang,
+        signed_at=accepted_at,
+    )
+
+    primary_fleet_unit_id = payload.fleet_unit_ids[0]
+    check_in_token = booking_qr.ensure_unique_check_in_token(db)
     booking = models.Booking(
         customer_name=payload.customer_name,
         phone=payload.phone,
         email=payload.email,
+        national_id=national_id,
         nationality=payload.nationality,
         hotel_location=payload.hotel_location,
         date=payload.date,
         time=payload.time,
         vehicle_id=payload.vehicle_id,
         route_id=payload.route_id,
-        fleet_unit_id=payload.fleet_unit_id,
+        fleet_unit_id=primary_fleet_unit_id,
         passengers=payload.passengers,
+        booking_mode=booking_mode,
+        subtotal=subtotal,
+        tax_amount=tax_amount,
         total_price=expected_price,
         payment_method=payload.payment_method,
         notes=payload.notes,
+        waiver_accepted=True,
+        waiver_accepted_at=accepted_at,
+        waiver_text=waiver_body,
+        waiver_language=waiver_lang,
+        check_in_token=check_in_token,
         booking_number=booking_numbers.generate_unique_booking_number(db),
         payment_status="pending",
         booking_status="pending",
     )
     db.add(booking)
+    db.flush()
+    fleet.create_booking_bikes(db, booking, payload.fleet_unit_ids)
     db.commit()
     db.refresh(booking)
 
-    fleet_unit = db.get(models.FleetUnit, booking.fleet_unit_id) if booking.fleet_unit_id else None
     background_tasks.add_task(email_service.send_booking_confirmation_task, booking.id)
 
-    return booking
+    return booking_to_out(booking, db)
+
+
+@app.get("/api/check-in/{token}", response_model=schemas.BookingCheckInOut)
+def get_check_in_booking(token: str, db: Session = Depends(get_db)):
+    booking = db.query(models.Booking).filter(models.Booking.check_in_token == token).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    return booking_check_in_out(booking, db)
+
+
+@app.post("/api/admin/check-in/{token}", response_model=schemas.BookingCheckInOut)
+def admin_check_in_booking(
+    token: str,
+    _: models.Admin = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    booking = db.query(models.Booking).filter(models.Booking.check_in_token == token).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.booking_status == "cancelled":
+        raise HTTPException(status_code=400, detail="This booking has been cancelled.")
+    if booking.checked_in_at is not None:
+        return booking_check_in_out(booking, db)
+    booking.checked_in_at = datetime.utcnow()
+    db.commit()
+    db.refresh(booking)
+    return booking_check_in_out(booking, db)
 
 
 @app.post("/api/payments/create")
@@ -343,6 +556,27 @@ def admin_bookings(
 def admin_bookings_archive(_: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
     process_expired_pending_bookings(db)
     return booking_archive.build_booking_archive(db)
+
+
+@app.get("/api/admin/bookings/{booking_id}/waiver", response_model=schemas.BookingWaiverOut)
+def admin_booking_waiver(
+    booking_id: int,
+    _: models.Admin = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    booking = db.get(models.Booking, booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    return schemas.BookingWaiverOut(
+        booking_id=booking.id,
+        booking_number=booking.booking_number or "",
+        customer_name=booking.customer_name,
+        national_id=booking.national_id,
+        waiver_accepted=bool(booking.waiver_accepted),
+        waiver_accepted_at=booking.waiver_accepted_at,
+        waiver_language=booking.waiver_language,
+        waiver_text=booking.waiver_text,
+    )
 
 
 @app.get("/api/admin/bookings/{booking_id}/emails", response_model=list[schemas.BookingEmailLogOut])
@@ -457,10 +691,7 @@ def update_booking_status(
         background_tasks.add_task(email_service.send_booking_confirmed_task, booking.id)
     elif previous_status != "cancelled" and booking.booking_status == "cancelled":
         background_tasks.add_task(email_service.send_booking_cancelled_task, booking.id)
-    return booking
-
-
-@app.post("/api/admin/vehicles", response_model=schemas.VehicleOut)
+    return booking_to_out(booking, db)
 def create_vehicle(payload: schemas.VehicleCreate, _: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
     vehicle = models.Vehicle(**payload.model_dump())
     db.add(vehicle)
@@ -607,14 +838,25 @@ def delete_fleet_unit(unit_id: int, _: models.Admin = Depends(auth.get_current_a
         raise HTTPException(status_code=404, detail="Fleet unit not found")
     active_booking = (
         db.query(models.Booking)
+        .outerjoin(models.BookingBike, models.BookingBike.booking_id == models.Booking.id)
         .filter(
-            models.Booking.fleet_unit_id == unit_id,
             models.Booking.booking_status.in_(fleet.ACTIVE_BOOKING_STATUSES),
+            (
+                (models.Booking.fleet_unit_id == unit_id)
+                | (models.BookingBike.fleet_unit_id == unit_id)
+            ),
         )
         .first()
     )
     if active_booking:
         raise HTTPException(status_code=409, detail="Cannot delete a buggy with active bookings. Deactivate it instead.")
+    db.query(models.BookingBike).filter(models.BookingBike.fleet_unit_id == unit_id).delete(
+        synchronize_session=False
+    )
+    db.query(models.Booking).filter(models.Booking.fleet_unit_id == unit_id).update(
+        {models.Booking.fleet_unit_id: None},
+        synchronize_session=False,
+    )
     db.delete(unit)
     db.commit()
     return {"deleted": True}

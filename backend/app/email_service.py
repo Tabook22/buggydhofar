@@ -1,3 +1,4 @@
+import html
 import logging
 import os
 import smtplib
@@ -8,6 +9,9 @@ from pathlib import Path
 
 from . import models
 from .booking_numbers import booking_reference
+from .booking_qr import build_check_in_url, qr_code_image_url
+from .fleet import booking_fleet_units, format_bike_label
+from .pricing import TAX_PERCENT, booking_price_breakdown
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +30,38 @@ PAYMENT_LABELS = {
 
 def _payment_label(method: str) -> str:
     return PAYMENT_LABELS.get(method, method.replace("_", " ").title())
+
+
+def _price_breakdown(booking: models.Booking) -> tuple[float, float, float]:
+    return booking_price_breakdown(booking.subtotal, booking.tax_amount, booking.total_price)
+
+
+def _price_plain_lines(booking: models.Booking) -> str:
+    subtotal, tax_amount, total = _price_breakdown(booking)
+    if tax_amount <= 0:
+        return f"Total: {total:.2f} OMR"
+    return (
+        f"Subtotal: {subtotal:.2f} OMR\n"
+        f"Tax ({TAX_PERCENT}%): {tax_amount:.2f} OMR\n"
+        f"Total (incl. tax): {total:.2f} OMR"
+    )
+
+
+def _price_html_rows(booking: models.Booking) -> str:
+    subtotal, tax_amount, total = _price_breakdown(booking)
+    if tax_amount <= 0:
+        return (
+            f"<tr><td style='padding:8px 0;border-bottom:1px solid #eee'><strong>Total</strong></td>"
+            f"<td style='padding:8px 0;border-bottom:1px solid #eee'>{total:.2f} OMR</td></tr>"
+        )
+    return (
+        f"<tr><td style='padding:8px 0;border-bottom:1px solid #eee'><strong>Subtotal</strong></td>"
+        f"<td style='padding:8px 0;border-bottom:1px solid #eee'>{subtotal:.2f} OMR</td></tr>"
+        f"<tr><td style='padding:8px 0;border-bottom:1px solid #eee'><strong>Tax ({TAX_PERCENT}%)</strong></td>"
+        f"<td style='padding:8px 0;border-bottom:1px solid #eee'>{tax_amount:.2f} OMR</td></tr>"
+        f"<tr><td style='padding:8px 0;border-bottom:1px solid #eee'><strong>Total (incl. tax)</strong></td>"
+        f"<td style='padding:8px 0;border-bottom:1px solid #eee'><strong>{total:.2f} OMR</strong></td></tr>"
+    )
 
 
 def _format_transfer_block(content: models.SiteContent | None) -> str:
@@ -58,34 +94,70 @@ def _format_transfer_block(content: models.SiteContent | None) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _waiver_email_blocks(booking: models.Booking) -> tuple[str, str]:
+    if not booking.waiver_text:
+        return "", ""
+    plain = f"\n\n--- Liability waiver (signed electronically) ---\n\n{booking.waiver_text}"
+    escaped = html.escape(booking.waiver_text)
+    html_block = f"""
+  <hr style="margin:28px 0;border:none;border-top:1px solid #ddd" />
+  <h3 style="color:#1f7a4f;margin-bottom:8px">Liability waiver (signed electronically)</h3>
+  <pre style="white-space:pre-wrap;font-family:Arial,sans-serif;font-size:13px;line-height:1.5;background:#f7f7f7;padding:16px;border-radius:8px;border:1px solid #eee">{escaped}</pre>"""
+    return plain, html_block
+
+
+def _qr_email_blocks(booking: models.Booking) -> tuple[str, str]:
+    if not booking.check_in_token:
+        return "", ""
+    check_in_url = build_check_in_url(booking.check_in_token)
+    qr_url = qr_code_image_url(check_in_url)
+    plain = f"""
+
+Check-in QR code: {check_in_url}
+Show this QR code when you arrive so our team can verify your booking."""
+    html_block = f"""
+  <hr style="margin:28px 0;border:none;border-top:1px solid #ddd" />
+  <h3 style="color:#1f7a4f;margin-bottom:8px">Your check-in QR code</h3>
+  <p style="color:#555">Show this QR code when you arrive. Our team will scan it to verify your booking, date, and time.</p>
+  <p style="text-align:center;margin:16px 0"><img src="{qr_url}" alt="Booking QR code" width="200" height="200" style="border:1px solid #eee;border-radius:8px" /></p>
+  <p style="font-size:12px;color:#888;word-break:break-all">{check_in_url}</p>"""
+    return plain, html_block
+
+
 def _build_confirmation_bodies(
     booking: models.Booking,
     route: models.Route | None,
-    fleet_unit: models.FleetUnit | None,
+    fleet_units: list[models.FleetUnit],
     site_content: models.SiteContent | None = None,
 ) -> tuple[str, str]:
     route_name = route.name_en if route else "—"
-    buggy_label = f"Buggy #{fleet_unit.unit_number}" if fleet_unit else "—"
+    buggy_label = format_bike_label(fleet_units)
+    bike_count = len(fleet_units)
     notes_block = f"\nNotice: {booking.notes}" if booking.notes else ""
+    waiver_plain, waiver_html = _waiver_email_blocks(booking)
+    qr_plain, qr_html = _qr_email_blocks(booking)
 
     ref = booking_reference(booking)
+    mode_label = "Individual bikes (one per person)" if getattr(booking, "booking_mode", "group") == "individual" else "Group (share bikes)"
     plain = f"""Dear {booking.customer_name},
 
 Thank you for booking with Buggy Dhofar. We have received your booking request.
 
 Booking number: {ref}
+Booking type: {mode_label}
 Name: {booking.customer_name}
 Email: {booking.email}
 Mobile: {booking.phone}
 Date: {booking.date}
 Time: {booking.time}
-Buggy bike: {buggy_label}
+Buggy bike(s): {buggy_label}
+Bikes booked: {bike_count}
 Route: {route_name}
 Passengers: {booking.passengers}
-Total: {booking.total_price:.2f} OMR
+{_price_plain_lines(booking)}
 Payment method: {_payment_label(booking.payment_method)}
 Status: Pending — our team will confirm your booking within 24 hours.
-Please keep booking number {ref} for all follow-up.{notes_block}{_format_transfer_block(site_content) if booking.payment_method == "bank_transfer" else ""}
+Please keep booking number {ref} for all follow-up.{notes_block}{_format_transfer_block(site_content) if booking.payment_method == "bank_transfer" else ""}{qr_plain}{waiver_plain}
 
 We look forward to seeing you in Salalah / Dhofar.
 
@@ -105,15 +177,16 @@ info@buggydhofar.com
     <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Booking number</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{ref}</td></tr>
     <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Date</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{booking.date}</td></tr>
     <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Time</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{booking.time}</td></tr>
-    <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Buggy bike</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{buggy_label}</td></tr>
+    <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Buggy bike(s)</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{buggy_label}</td></tr>
+    <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Bikes</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{bike_count}</td></tr>
     <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Route</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{route_name}</td></tr>
     <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Passengers</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{booking.passengers}</td></tr>
-    <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Total</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{booking.total_price:.2f} OMR</td></tr>
+    {_price_html_rows(booking)}
     <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Payment</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{_payment_label(booking.payment_method)}</td></tr>
     <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Mobile</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{booking.phone}</td></tr>
     {"<tr><td style='padding:8px 0;border-bottom:1px solid #eee'><strong>Notice</strong></td><td style='padding:8px 0;border-bottom:1px solid #eee'>" + booking.notes + "</td></tr>" if booking.notes else ""}
   </table>
-  <p style="color:#555">We look forward to seeing you in Salalah / Dhofar.</p>
+  <p style="color:#555">We look forward to seeing you in Salalah / Dhofar.</p>{qr_html}{waiver_html}
   <p style="color:#1f7a4f;font-weight:bold">Buggy Dhofar<br>info@buggydhofar.com</p>
 </body>
 </html>"""
@@ -124,11 +197,14 @@ info@buggydhofar.com
 def _build_confirmed_bodies(
     booking: models.Booking,
     route: models.Route | None,
-    fleet_unit: models.FleetUnit | None,
+    fleet_units: list[models.FleetUnit],
 ) -> tuple[str, str]:
     ref = booking_reference(booking)
     route_name = route.name_en if route else "—"
-    buggy_label = f"Buggy #{fleet_unit.unit_number}" if fleet_unit else "—"
+    buggy_label = format_bike_label(fleet_units)
+    bike_count = len(fleet_units)
+    waiver_plain, waiver_html = _waiver_email_blocks(booking)
+    qr_plain, qr_html = _qr_email_blocks(booking)
     plain = f"""Dear {booking.customer_name},
 
 Great news — your booking with Buggy Dhofar is confirmed.
@@ -136,12 +212,13 @@ Great news — your booking with Buggy Dhofar is confirmed.
 Booking number: {ref}
 Date: {booking.date}
 Time: {booking.time}
-Buggy bike: {buggy_label}
+Buggy bike(s): {buggy_label}
+Bikes booked: {bike_count}
 Route: {route_name}
 Passengers: {booking.passengers}
-Total: {booking.total_price:.2f} OMR
+{_price_plain_lines(booking)}
 
-Please keep booking number {ref} and show it when you arrive.
+Please keep booking number {ref} and show it when you arrive.{qr_plain}{waiver_plain}
 
 We look forward to seeing you in Salalah / Dhofar.
 
@@ -158,10 +235,11 @@ info@buggydhofar.com
   <table style="width:100%;border-collapse:collapse;margin:20px 0">
     <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Date</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{booking.date}</td></tr>
     <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Time</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{booking.time}</td></tr>
-    <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Buggy bike</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{buggy_label}</td></tr>
+    <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Buggy bike(s)</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{buggy_label}</td></tr>
+    <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Bikes</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{bike_count}</td></tr>
     <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Route</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{route_name}</td></tr>
-    <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Total</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{booking.total_price:.2f} OMR</td></tr>
-  </table>
+    {_price_html_rows(booking)}
+  </table>{qr_html}{waiver_html}
   <p style="color:#1f7a4f;font-weight:bold">Buggy Dhofar<br>info@buggydhofar.com</p>
 </body>
 </html>"""
@@ -171,13 +249,14 @@ info@buggydhofar.com
 def _build_cancelled_bodies(
     booking: models.Booking,
     route: models.Route | None,
-    fleet_unit: models.FleetUnit | None,
+    fleet_units: list[models.FleetUnit],
     *,
     auto_expired: bool = False,
 ) -> tuple[str, str]:
     ref = booking_reference(booking)
     route_name = route.name_en if route else "—"
-    buggy_label = f"Buggy #{fleet_unit.unit_number}" if fleet_unit else "—"
+    buggy_label = format_bike_label(fleet_units)
+    bike_count = len(fleet_units)
     reason = (
         "It was not confirmed within 24 hours."
         if auto_expired
@@ -192,7 +271,8 @@ Booking number: {ref}
 
 Date: {booking.date}
 Time: {booking.time}
-Buggy bike: {buggy_label}
+Buggy bike(s): {buggy_label}
+Bikes booked: {bike_count}
 Route: {route_name}
 
 If you have questions, contact us at info@buggydhofar.com and quote booking number {ref}.
@@ -298,10 +378,10 @@ def _log_email(
     return entry
 
 
-def send_booking_confirmation(booking: models.Booking, route: models.Route | None, fleet_unit: models.FleetUnit | None, site_content: models.SiteContent | None = None) -> None:
+def send_booking_confirmation(booking: models.Booking, route: models.Route | None, fleet_units: list[models.FleetUnit], site_content: models.SiteContent | None = None) -> None:
     from .database import SessionLocal
 
-    plain, html = _build_confirmation_bodies(booking, route, fleet_unit, site_content)
+    plain, html = _build_confirmation_bodies(booking, route, fleet_units, site_content)
     status, error = _deliver_email(booking.email, CONFIRMATION_SUBJECT, plain, html)
 
     db = SessionLocal()
@@ -335,9 +415,9 @@ def send_booking_confirmation_task(booking_id: int) -> None:
             logger.warning("Booking #%s not found for confirmation email", booking_id)
             return
         route = db.get(models.Route, booking.route_id)
-        fleet_unit = db.get(models.FleetUnit, booking.fleet_unit_id) if booking.fleet_unit_id else None
+        fleet_units = booking_fleet_units(db, booking)
         site_content = db.query(models.SiteContent).first()
-        send_booking_confirmation(booking, route, fleet_unit, site_content)
+        send_booking_confirmation(booking, route, fleet_units, site_content)
     except Exception:
         logger.exception("Failed to send booking confirmation for #%s", booking_id)
     finally:
@@ -354,8 +434,8 @@ def send_booking_confirmed_task(booking_id: int) -> None:
             logger.warning("Booking #%s not found for confirmed email", booking_id)
             return
         route = db.get(models.Route, booking.route_id)
-        fleet_unit = db.get(models.FleetUnit, booking.fleet_unit_id) if booking.fleet_unit_id else None
-        plain, html = _build_confirmed_bodies(booking, route, fleet_unit)
+        fleet_units = booking_fleet_units(db, booking)
+        plain, html = _build_confirmed_bodies(booking, route, fleet_units)
         status, error = _deliver_email(booking.email, CONFIRMED_SUBJECT, plain, html)
         _log_email(
             db,
@@ -386,8 +466,8 @@ def send_booking_cancelled_task(booking_id: int, auto_expired: bool = False) -> 
             logger.warning("Booking #%s not found for cancellation email", booking_id)
             return
         route = db.get(models.Route, booking.route_id)
-        fleet_unit = db.get(models.FleetUnit, booking.fleet_unit_id) if booking.fleet_unit_id else None
-        plain, html = _build_cancelled_bodies(booking, route, fleet_unit, auto_expired=auto_expired)
+        fleet_units = booking_fleet_units(db, booking)
+        plain, html = _build_cancelled_bodies(booking, route, fleet_units, auto_expired=auto_expired)
         status, error = _deliver_email(booking.email, CANCELLED_SUBJECT, plain, html)
         _log_email(
             db,
@@ -446,8 +526,8 @@ def send_admin_expired_booking_notice(booking_id: int) -> None:
         booking = db.get(models.Booking, booking_id)
         if not booking:
             return
-        fleet_unit = db.get(models.FleetUnit, booking.fleet_unit_id) if booking.fleet_unit_id else None
-        buggy_label = f"Buggy #{fleet_unit.unit_number}" if fleet_unit else "—"
+        fleet_units = booking_fleet_units(db, booking)
+        buggy_label = format_bike_label(fleet_units)
         ref = booking_reference(booking)
         subject = f"Booking {ref} auto-cancelled (24h expired)"
         plain = f"""Admin notice — booking auto-cancelled

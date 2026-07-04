@@ -102,24 +102,53 @@ class BookingCreate(BaseModel):
     customer_name: str
     phone: str
     email: EmailStr
+    national_id: str
     nationality: str
     hotel_location: str
     date: str
     time: str
     vehicle_id: int
     route_id: int
-    fleet_unit_id: int
+    fleet_unit_ids: list[int]
     passengers: int
+    booking_mode: str = "group"
     total_price: float
     payment_method: str
+    waiver_accepted: bool
+    waiver_language: str = "ar"
     notes: str | None = None
 
 
-class BookingOut(BookingCreate):
+class BookingOut(BaseModel):
     id: int
     booking_number: str
+    customer_name: str
+    phone: str
+    email: EmailStr
+    nationality: str
+    hotel_location: str
+    date: str
+    time: str
+    vehicle_id: int
+    route_id: int
+    fleet_unit_ids: list[int] = []
+    fleet_unit_numbers: list[int] = []
+    bike_count: int = 1
+    booking_mode: str = "group"
+    passengers: int
+    subtotal: float | None = None
+    tax_amount: float | None = None
+    total_price: float
+    payment_method: str
     payment_status: str
     booking_status: str
+    notes: str | None = None
+    national_id: str | None = None
+    waiver_accepted: bool = False
+    waiver_accepted_at: datetime | None = None
+    check_in_token: str | None = None
+    check_in_url: str | None = None
+    checked_in_at: datetime | None = None
     created_at: datetime
 
     class Config:
@@ -146,8 +175,43 @@ class BookingAdminOut(BookingOut):
     confirmation_email_sent: bool = False
     booking_confirmed: bool = False
     fleet_unit_number: int | None = None
+    fleet_unit_id: int | None = None
     route_name_en: str | None = None
     email_count: int = 0
+
+
+class BookingWaiverOut(BaseModel):
+    booking_id: int
+    booking_number: str
+    customer_name: str
+    national_id: str | None = None
+    waiver_accepted: bool = False
+    waiver_accepted_at: datetime | None = None
+    waiver_language: str | None = None
+    waiver_text: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class BookingCheckInOut(BaseModel):
+    booking_id: int
+    booking_number: str
+    customer_name: str
+    phone: str
+    email: EmailStr
+    date: str
+    time: str
+    passengers: int
+    bike_count: int
+    fleet_unit_numbers: list[int] = []
+    route_name_en: str | None = None
+    route_name_ar: str | None = None
+    booking_status: str
+    payment_status: str
+    total_price: float
+    checked_in_at: datetime | None = None
+    check_in_url: str
 
 
 class BookingArchiveDay(BaseModel):

@@ -106,6 +106,11 @@ const emptyFleetForm = {
   is_active: true
 };
 
+function nextFleetUnitNumber(units: FleetUnit[]) {
+  if (!units.length) return 1;
+  return Math.max(...units.map((unit) => unit.unit_number)) + 1;
+}
+
 const emptySiteContent: SiteContentForm = {
   hero_badge_en: "",
   hero_badge_ar: "",
@@ -159,6 +164,7 @@ export default function AdminDashboard() {
   const pathSaveBannerRef = useRef<HTMLDivElement | null>(null);
   const [siteContentForm, setSiteContentForm] = useState<SiteContentForm>(emptySiteContent);
   const [transferMessage, setTransferMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [fleetMessage, setFleetMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   function handleAuthFailure(message?: string) {
     clearAdminToken();
@@ -167,7 +173,7 @@ export default function AdminDashboard() {
   }
 
   async function loadAdminData(authToken = token) {
-    if (!authToken) return;
+    if (!authToken) return null;
     try {
       const [statsData, vehicleData, routeData, fleetData, contentData] = await Promise.all([
         api.adminGet<Stats>("/api/admin/dashboard-stats", authToken),
@@ -182,6 +188,7 @@ export default function AdminDashboard() {
       setFleetUnits(fleetData);
       const { id: _id, ...editableContent } = contentData;
       setSiteContentForm({ ...emptySiteContent, ...editableContent });
+      return fleetData;
     } catch (error) {
       const message = error instanceof Error ? error.message : t("admin.pathSaveError");
       if (isAdminAuthError(message)) {
@@ -388,20 +395,57 @@ export default function AdminDashboard() {
 
   async function saveFleetUnit(event: FormEvent) {
     event.preventDefault();
+    setFleetMessage(null);
     const payload = {
       ...fleetForm,
       unit_number: Number(fleetForm.unit_number),
       name_en: fleetForm.name_en || `Buggy Bike #${fleetForm.unit_number}`,
       name_ar: fleetForm.name_ar || `دراجة باجي #${fleetForm.unit_number}`
     };
-    if (editingFleetId) {
-      await api.adminSend(`/api/admin/fleet/${editingFleetId}`, token, "PUT", payload);
-    } else {
-      await api.adminSend("/api/admin/fleet", token, "POST", payload);
+    try {
+      if (editingFleetId) {
+        await api.adminSend(`/api/admin/fleet/${editingFleetId}`, token, "PUT", payload);
+        setFleetMessage({ type: "success", text: t("admin.fleetUpdated") });
+      } else {
+        await api.adminSend("/api/admin/fleet", token, "POST", payload);
+        setFleetMessage({ type: "success", text: t("admin.fleetAdded") });
+      }
+      setEditingFleetId(null);
+      const fleetData = await loadAdminData();
+      if (fleetData) {
+        setFleetForm({ ...emptyFleetForm, unit_number: nextFleetUnitNumber(fleetData) });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t("admin.pathSaveError");
+      if (isAdminAuthError(message)) {
+        handleAuthFailure(message);
+        return;
+      }
+      setFleetMessage({ type: "error", text: message });
     }
-    setEditingFleetId(null);
-    setFleetForm({ ...emptyFleetForm, unit_number: fleetUnits.length + 1 });
-    await loadAdminData();
+  }
+
+  async function deleteFleetUnit(unit: FleetUnit) {
+    if (!window.confirm(t("admin.deleteFleetConfirm", { number: unit.unit_number }))) return;
+    setFleetMessage(null);
+    try {
+      await api.adminSend(`/api/admin/fleet/${unit.id}`, token, "DELETE");
+      if (editingFleetId === unit.id) {
+        setEditingFleetId(null);
+      }
+      const fleetData = await loadAdminData();
+      if (fleetData) {
+        setFleetForm({ ...emptyFleetForm, unit_number: nextFleetUnitNumber(fleetData) });
+      }
+      setFleetMessage({ type: "success", text: t("admin.fleetDeleted") });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t("admin.pathSaveError");
+      if (isAdminAuthError(message)) {
+        handleAuthFailure(message);
+        return;
+      }
+      setFleetMessage({ type: "error", text: message });
+    }
   }
 
   async function saveSiteContent(event: FormEvent) {
@@ -573,6 +617,11 @@ export default function AdminDashboard() {
         <section className="mt-8 rounded-[2rem] bg-white/5 p-6">
           <h2 className="text-2xl font-black">{t("admin.fleetTitle")}</h2>
           <p className="mt-2 text-sm text-white/60">{t("admin.fleetSubtitle")}</p>
+          {fleetMessage && (
+            <p className={`mt-4 rounded-2xl px-4 py-3 text-sm ${fleetMessage.type === "success" ? "bg-forest-500/15 text-forest-200" : "bg-red-500/15 text-red-200"}`}>
+              {fleetMessage.text}
+            </p>
+          )}
           <form onSubmit={saveFleetUnit} className="mt-5 grid gap-3 md:grid-cols-4">
             <input className={inputClass} type="number" min={1} placeholder="Unit #" value={fleetForm.unit_number} onChange={(event) => setFleetForm({ ...fleetForm, unit_number: Number(event.target.value) })} />
             <input className={inputClass} placeholder="Name EN" value={fleetForm.name_en} onChange={(event) => setFleetForm({ ...fleetForm, name_en: event.target.value })} />
@@ -584,7 +633,7 @@ export default function AdminDashboard() {
             <div className="flex gap-3 md:col-span-4">
               <button className="rounded-2xl bg-forest-500 px-5 py-3 font-bold">{editingFleetId ? t("admin.save") : t("admin.addFleetUnit")}</button>
               {editingFleetId && (
-                <button type="button" onClick={() => { setEditingFleetId(null); setFleetForm({ ...emptyFleetForm, unit_number: fleetUnits.length + 1 }); }} className="rounded-2xl border border-white/10 px-5 py-3 font-bold">
+                <button type="button" onClick={() => { setEditingFleetId(null); setFleetForm({ ...emptyFleetForm, unit_number: nextFleetUnitNumber(fleetUnits) }); }} className="rounded-2xl border border-white/10 px-5 py-3 font-bold">
                   Cancel
                 </button>
               )}
@@ -598,8 +647,8 @@ export default function AdminDashboard() {
                   {!unit.is_active && <span className="ms-2 rounded-full bg-yellow-500/20 px-2 py-1 text-xs text-yellow-200">Inactive</span>}
                 </span>
                 <div className="flex gap-2">
-                  <button onClick={() => { setEditingFleetId(unit.id); setFleetForm({ unit_number: unit.unit_number, name_en: unit.name_en, name_ar: unit.name_ar, is_active: unit.is_active }); }} className="text-forest-400">Edit</button>
-                  <button onClick={() => deleteItem(`/api/admin/fleet/${unit.id}`)} className="text-red-300">{t("admin.delete")}</button>
+                  <button type="button" onClick={() => { setEditingFleetId(unit.id); setFleetForm({ unit_number: unit.unit_number, name_en: unit.name_en, name_ar: unit.name_ar, is_active: unit.is_active }); setFleetMessage(null); }} className="text-forest-400">{t("admin.edit")}</button>
+                  <button type="button" onClick={() => deleteFleetUnit(unit)} className="text-red-300">{t("admin.delete")}</button>
                 </div>
               </div>
             ))}

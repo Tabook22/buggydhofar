@@ -47,6 +47,7 @@ class FleetUnit(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     bookings: Mapped[list["Booking"]] = relationship(back_populates="fleet_unit")
+    booking_bikes: Mapped[list["BookingBike"]] = relationship(back_populates="fleet_unit")
 
 
 class Route(Base):
@@ -90,17 +91,42 @@ class Booking(Base):
     route_id: Mapped[int] = mapped_column(ForeignKey("routes.id"))
     fleet_unit_id: Mapped[int | None] = mapped_column(ForeignKey("fleet_units.id"), nullable=True, index=True)
     passengers: Mapped[int] = mapped_column(Integer)
+    subtotal: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tax_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     total_price: Mapped[float] = mapped_column(Float)
     payment_method: Mapped[str] = mapped_column(String(40))
     payment_status: Mapped[str] = mapped_column(String(40), default="pending")
     booking_status: Mapped[str] = mapped_column(String(40), default="pending")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    national_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    booking_mode: Mapped[str] = mapped_column(String(20), default="group")
+    waiver_accepted: Mapped[bool] = mapped_column(Boolean, default=False)
+    waiver_accepted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    waiver_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    waiver_language: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    check_in_token: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
+    checked_in_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     vehicle: Mapped[Vehicle] = relationship(back_populates="bookings")
     route: Mapped[Route] = relationship(back_populates="bookings")
     fleet_unit: Mapped["FleetUnit | None"] = relationship(back_populates="bookings")
+    bikes: Mapped[list["BookingBike"]] = relationship(back_populates="booking", cascade="all, delete-orphan")
     email_logs: Mapped[list["BookingEmailLog"]] = relationship(back_populates="booking")
+
+
+class BookingBike(Base):
+    """Bikes assigned to a group booking (one row per physical buggy)."""
+
+    __tablename__ = "booking_bikes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), index=True)
+    fleet_unit_id: Mapped[int] = mapped_column(ForeignKey("fleet_units.id"), index=True)
+    passengers: Mapped[int] = mapped_column(Integer)
+
+    booking: Mapped["Booking"] = relationship(back_populates="bikes")
+    fleet_unit: Mapped["FleetUnit"] = relationship(back_populates="booking_bikes")
 
 
 class BookingEmailLog(Base):

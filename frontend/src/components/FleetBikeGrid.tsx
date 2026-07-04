@@ -1,5 +1,5 @@
-import { Bike } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Bike } from "lucide-react";
 import { FleetUnitAvailability } from "../api/client";
 
 function unitLabel(unit: FleetUnitAvailability, language: string) {
@@ -9,18 +9,21 @@ function unitLabel(unit: FleetUnitAvailability, language: string) {
 
 export function FleetBikeGrid({
   units,
-  selectedId = 0,
-  onSelect,
+  selectedIds = [],
+  maxSelectable,
+  onToggle,
   loading = false,
   readOnly = false
 }: {
   units: FleetUnitAvailability[];
-  selectedId?: number;
-  onSelect?: (id: number) => void;
+  selectedIds?: number[];
+  maxSelectable?: number;
+  onToggle?: (id: number) => void;
   loading?: boolean;
   readOnly?: boolean;
 }) {
   const { t, i18n } = useTranslation();
+  const limit = maxSelectable ?? 1;
 
   if (loading) {
     return (
@@ -53,12 +56,18 @@ export function FleetBikeGrid({
           </span>
           {t("availability.bikeBooked")}
         </span>
+        {limit > 1 && (
+          <span className="text-forest-300">
+            {t("booking.bikesSelected", { selected: selectedIds.length, required: limit })}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-12">
         {units.map((unit) => {
           const available = unit.is_available;
-          const selected = unit.id === selectedId;
+          const selected = selectedIds.includes(unit.id);
+          const atLimit = selectedIds.length >= limit && !selected;
           const label = unitLabel(unit, i18n.language);
           const status = available ? t("availability.bikeAvailable") : t("availability.bikeBooked");
 
@@ -72,15 +81,18 @@ export function FleetBikeGrid({
           const className = [
             "flex min-h-[4.25rem] flex-col items-center justify-center rounded-xl border px-1 py-2 transition",
             available
-              ? "border-forest-400/55 bg-forest-500/20 text-forest-200 hover:bg-forest-500/30"
+              ? selected
+                ? "border-white bg-forest-500/35 text-white ring-2 ring-white ring-offset-2 ring-offset-[#071611]"
+                : atLimit
+                  ? "border-forest-400/25 bg-forest-500/10 text-forest-300/50"
+                  : "border-forest-400/55 bg-forest-500/20 text-forest-200 hover:bg-forest-500/30 cursor-pointer"
               : "cursor-not-allowed border-red-400/35 bg-red-500/12 text-red-300/90",
-            selected && (available || readOnly) ? "ring-2 ring-white ring-offset-2 ring-offset-[#071611]" : "",
-            readOnly || !available ? "" : "cursor-pointer"
+            readOnly || !available ? "" : atLimit && !selected ? "cursor-not-allowed" : ""
           ]
             .filter(Boolean)
             .join(" ");
 
-          if (readOnly || !available || !onSelect) {
+          if (readOnly || !available || !onToggle) {
             return (
               <div
                 key={unit.id}
@@ -97,7 +109,8 @@ export function FleetBikeGrid({
             <button
               key={unit.id}
               type="button"
-              onClick={() => onSelect(unit.id)}
+              onClick={() => onToggle(unit.id)}
+              disabled={!available || (atLimit && !selected)}
               className={className}
               title={`${label} — ${status}`}
               aria-label={`${label} — ${status}`}

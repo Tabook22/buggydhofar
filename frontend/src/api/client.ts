@@ -70,17 +70,68 @@ export type BookingPayload = {
   customer_name: string;
   phone: string;
   email: string;
+  national_id: string;
   nationality: string;
   hotel_location: string;
   date: string;
   time: string;
   vehicle_id: number;
   route_id: number;
-  fleet_unit_id: number;
+  fleet_unit_ids: number[];
   passengers: number;
+  booking_mode: BookingMode;
   total_price: number;
   payment_method: string;
+  waiver_accepted: boolean;
+  waiver_language: string;
   notes?: string;
+};
+
+export type BookingResult = {
+  id: number;
+  booking_number: string;
+  customer_name: string;
+  phone: string;
+  email: string;
+  date: string;
+  time: string;
+  vehicle_id: number;
+  route_id: number;
+  fleet_unit_ids: number[];
+  fleet_unit_numbers: number[];
+  bike_count: number;
+  passengers: number;
+  booking_mode: string;
+  subtotal: number | null;
+  tax_amount: number | null;
+  total_price: number;
+  payment_method: string;
+  payment_status: string;
+  booking_status: string;
+  check_in_token: string | null;
+  check_in_url: string | null;
+  checked_in_at: string | null;
+  notes?: string | null;
+};
+
+export type BookingCheckIn = {
+  booking_id: number;
+  booking_number: string;
+  customer_name: string;
+  phone: string;
+  email: string;
+  date: string;
+  time: string;
+  passengers: number;
+  bike_count: number;
+  fleet_unit_numbers: number[];
+  route_name_en: string | null;
+  route_name_ar: string | null;
+  booking_status: string;
+  payment_status: string;
+  total_price: number;
+  checked_in_at: string | null;
+  check_in_url: string;
 };
 
 export type SiteContent = {
@@ -158,13 +209,70 @@ export type PaymentTransferInfo = Pick<
   | "transfer_show_notes"
 >;
 
-export const BUGGY_PRICE_1_PASSENGER = 24;
+export type BookingMode = "group" | "individual";
+
+export const BUGGY_PRICE_1_PASSENGER = 25;
 export const BUGGY_PRICE_PER_PASSENGER_2 = 15;
+export const MAX_PASSENGERS_PER_BIKE = 2;
+export const MAX_GROUP_PASSENGERS = 40;
+export const TAX_RATE = 0.05;
+export const TAX_PERCENT = 5;
+
+export function normalizeBookingMode(mode: string | undefined): BookingMode {
+  return mode === "individual" ? "individual" : "group";
+}
+
+export function bikesRequiredForPassengers(passengers: number, mode: BookingMode = "group") {
+  const count = Math.max(passengers, 1);
+  if (mode === "individual") return count;
+  return Math.ceil(count / MAX_PASSENGERS_PER_BIKE);
+}
 
 export function calculateBuggyPrice(passengers: number) {
   if (passengers === 1) return BUGGY_PRICE_1_PASSENGER;
   if (passengers === 2) return BUGGY_PRICE_PER_PASSENGER_2 * 2;
   return 0;
+}
+
+export function calculateGroupPrice(totalPassengers: number) {
+  return calculateBookingPrice(totalPassengers, "group");
+}
+
+export function calculateBookingPrice(totalPassengers: number, mode: BookingMode = "group") {
+  if (mode === "individual") {
+    return Math.max(totalPassengers, 0) * BUGGY_PRICE_1_PASSENGER;
+  }
+  let remaining = Math.max(totalPassengers, 0);
+  let total = 0;
+  while (remaining > 0) {
+    const onBike = Math.min(MAX_PASSENGERS_PER_BIKE, remaining);
+    total += calculateBuggyPrice(onBike);
+    remaining -= onBike;
+  }
+  return total;
+}
+
+export function calculateSubtotal(totalPassengers: number, mode: BookingMode = "group") {
+  return calculateBookingPrice(totalPassengers, mode);
+}
+
+export function calculateTax(subtotal: number) {
+  return Math.round(subtotal * TAX_RATE * 100) / 100;
+}
+
+export function calculateTotalWithTax(subtotal: number) {
+  return Math.round((subtotal + calculateTax(subtotal)) * 100) / 100;
+}
+
+export function calculateBookingTotal(totalPassengers: number, mode: BookingMode = "group") {
+  const subtotal = calculateSubtotal(totalPassengers, mode);
+  return calculateTotalWithTax(subtotal);
+}
+
+export function maxPassengersForAvailableBikes(availableBikes: number, mode: BookingMode) {
+  if (availableBikes < 1) return 0;
+  if (mode === "individual") return Math.min(MAX_GROUP_PASSENGERS, availableBikes);
+  return Math.min(MAX_GROUP_PASSENGERS, availableBikes * MAX_PASSENGERS_PER_BIKE);
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -236,9 +344,15 @@ export const api = {
   checkAvailability: (params: URLSearchParams) =>
     request<{ available: boolean; available_count: number; total_bikes: number; message: string }>(`/api/availability?${params.toString()}`),
   createBooking: (payload: BookingPayload) =>
-    request<BookingPayload & { id: number; booking_number: string; booking_status: string; payment_status: string }>("/api/bookings", {
+    request<BookingResult>("/api/bookings", {
       method: "POST",
       body: JSON.stringify(payload)
+    }),
+  getCheckInBooking: (token: string) => request<BookingCheckIn>(`/api/check-in/${encodeURIComponent(token)}`),
+  adminCheckIn: (token: string, adminToken: string) =>
+    request<BookingCheckIn>(`/api/admin/check-in/${encodeURIComponent(token)}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${adminToken}` }
     }),
   adminLogin: (username: string, password: string) =>
     request<{ access_token: string; token_type: string }>("/api/admin/login", {

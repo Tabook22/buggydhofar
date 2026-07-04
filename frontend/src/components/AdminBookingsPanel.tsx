@@ -1,6 +1,8 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, isAdminAuthError } from "../api/client";
+import { BookingQrCode } from "./BookingQrCode";
 
 export type AdminBooking = {
   id: number;
@@ -11,7 +13,11 @@ export type AdminBooking = {
   date: string;
   time: string;
   fleet_unit_id?: number | null;
+  fleet_unit_ids?: number[];
   fleet_unit_number?: number | null;
+  fleet_unit_numbers?: number[];
+  bike_count?: number;
+  booking_mode?: string;
   route_name_en?: string | null;
   passengers: number;
   total_price: number;
@@ -19,6 +25,10 @@ export type AdminBooking = {
   payment_status: string;
   booking_status: string;
   notes?: string | null;
+  national_id?: string | null;
+  waiver_accepted?: boolean;
+  check_in_url?: string | null;
+  checked_in_at?: string | null;
   confirmation_email_sent: boolean;
   booking_confirmed: boolean;
   email_count: number;
@@ -37,6 +47,17 @@ type EmailLog = {
   body_plain: string;
   delivery_status: string;
   sent_at: string;
+};
+
+type BookingWaiver = {
+  booking_id: number;
+  booking_number: string;
+  customer_name: string;
+  national_id: string | null;
+  waiver_accepted: boolean;
+  waiver_accepted_at: string | null;
+  waiver_language: string | null;
+  waiver_text: string | null;
 };
 
 const inputClass = "w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-white outline-none focus:border-forest-400";
@@ -70,6 +91,10 @@ export function AdminBookingsPanel({
   const [replyStatus, setReplyStatus] = useState<string | null>(null);
   const [replySending, setReplySending] = useState(false);
   const [emailHistory, setEmailHistory] = useState<EmailLog[]>([]);
+  const [waiverBooking, setWaiverBooking] = useState<AdminBooking | null>(null);
+  const [waiverData, setWaiverData] = useState<BookingWaiver | null>(null);
+  const [waiverLoading, setWaiverLoading] = useState(false);
+  const [qrBooking, setQrBooking] = useState<AdminBooking | null>(null);
 
   const loadBookings = useCallback(
     async (year: number | null, month: number | null, day: number | null) => {
@@ -126,6 +151,20 @@ export function AdminBookingsPanel({
     }
   }
 
+  async function openWaiver(booking: AdminBooking) {
+    setWaiverBooking(booking);
+    setWaiverData(null);
+    setWaiverLoading(true);
+    try {
+      const data = await api.adminGet<BookingWaiver>(`/api/admin/bookings/${booking.id}/waiver`, token);
+      setWaiverData(data);
+    } catch {
+      setWaiverData(null);
+    } finally {
+      setWaiverLoading(false);
+    }
+  }
+
   async function submitReply(event: FormEvent) {
     event.preventDefault();
     if (!replyBooking) return;
@@ -162,9 +201,17 @@ export function AdminBookingsPanel({
           <h2 className="text-2xl font-black">{t("admin.bookingsArchive")}</h2>
           <p className="mt-1 text-sm text-white/60">{t("admin.bookingsArchiveHelp")}</p>
         </div>
-        <p className="text-sm font-bold text-forest-300">
-          {t("admin.archiveTotal", { count: archive?.total ?? 0 })}
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            to="/admin/checkin"
+            className="rounded-2xl bg-forest-500/20 px-4 py-2 text-sm font-bold text-forest-200 hover:bg-forest-500/30"
+          >
+            {t("checkIn.openScanner")}
+          </Link>
+          <p className="text-sm font-bold text-forest-300">
+            {t("admin.archiveTotal", { count: archive?.total ?? 0 })}
+          </p>
+        </div>
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[280px_1fr]">
@@ -262,8 +309,10 @@ export function AdminBookingsPanel({
                   <th className="p-3 text-start">{t("booking.email")}</th>
                   <th className="p-3 text-start">{t("booking.phone")}</th>
                   <th className="p-3 text-start">{t("booking.date")}</th>
+                  <th className="p-3 text-start">{t("booking.passengers")}</th>
                   <th className="p-3 text-start">{t("booking.buggyBike")}</th>
                   <th className="p-3 text-start">{t("booking.total")}</th>
+                  <th className="p-3 text-start">{t("booking.qrTitle")}</th>
                   <th className="p-3 text-start">{t("admin.emailSent")}</th>
                   <th className="p-3 text-start">{t("admin.status")}</th>
                   <th className="p-3 text-start">{t("admin.actions")}</th>
@@ -272,7 +321,7 @@ export function AdminBookingsPanel({
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={10} className="p-6 text-center text-white/50">
+                    <td colSpan={12} className="p-6 text-center text-white/50">
                       {t("availability.loading")}
                     </td>
                   </tr>
@@ -311,11 +360,40 @@ export function AdminBookingsPanel({
                         {booking.date} {booking.time}
                       </td>
                       <td className="p-3">
-                        #{booking.fleet_unit_number ?? booking.fleet_unit_id ?? "—"}
+                        {booking.passengers}
+                        {booking.booking_mode === "individual" ? (
+                          <span className="block text-xs text-forest-300">{t("booking.modeIndividual")}</span>
+                        ) : booking.bike_count && booking.bike_count > 1 ? (
+                          <span className="block text-xs text-white/45">
+                            {t("booking.bikesNeeded", { count: booking.bike_count })}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="p-3">
+                        {(booking.fleet_unit_numbers && booking.fleet_unit_numbers.length > 0
+                          ? booking.fleet_unit_numbers.map((n) => `#${n}`).join(", ")
+                          : `#${booking.fleet_unit_number ?? booking.fleet_unit_id ?? "—"}`) +
+                          (booking.bike_count && booking.bike_count > 1 ? ` (${booking.bike_count})` : "")}
                         {booking.route_name_en ? ` · ${booking.route_name_en}` : ""}
                       </td>
                       <td className="p-3">
                         {booking.total_price} {t("booking.omr")}
+                      </td>
+                      <td className="p-3">
+                        {booking.check_in_url ? (
+                          <button type="button" onClick={() => setQrBooking(booking)} className="block">
+                            <img
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=72x72&data=${encodeURIComponent(booking.check_in_url)}`}
+                              alt={t("booking.qrAlt")}
+                              className="h-12 w-12 rounded-lg border border-white/10 bg-white p-0.5"
+                            />
+                          </button>
+                        ) : (
+                          "—"
+                        )}
+                        {booking.checked_in_at && (
+                          <span className="mt-1 block text-xs font-bold text-forest-300">{t("checkIn.checkedIn")}</span>
+                        )}
                       </td>
                       <td className="p-3">
                         <span
@@ -348,24 +426,35 @@ export function AdminBookingsPanel({
                         </select>
                       </td>
                       <td className="p-3">
-                        <button
-                          type="button"
-                          onClick={() => openReply(booking)}
-                          className={`rounded-xl px-3 py-1.5 text-xs font-bold ${
-                            isCancelled
-                              ? "bg-red-500/15 text-red-300 hover:bg-red-500/25"
-                              : "bg-forest-500/20 text-forest-200 hover:bg-forest-500/30"
-                          }`}
-                        >
-                          {t("admin.replyEmail")}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          {booking.waiver_accepted && (
+                            <button
+                              type="button"
+                              onClick={() => openWaiver(booking)}
+                              className="rounded-xl bg-white/10 px-3 py-1.5 text-xs font-bold text-white/85 hover:bg-white/15"
+                            >
+                              {t("admin.viewWaiver")}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => openReply(booking)}
+                            className={`rounded-xl px-3 py-1.5 text-xs font-bold ${
+                              isCancelled
+                                ? "bg-red-500/15 text-red-300 hover:bg-red-500/25"
+                                : "bg-forest-500/20 text-forest-200 hover:bg-forest-500/30"
+                            }`}
+                          >
+                            {t("admin.replyEmail")}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                     );
                   })}
                 {!loading && bookings.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="p-8 text-center text-white/50">
+                    <td colSpan={12} className="p-8 text-center text-white/50">
                       {t("admin.noBookingsInRange")}
                     </td>
                   </tr>
@@ -443,6 +532,76 @@ export function AdminBookingsPanel({
                 </ul>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {qrBooking && qrBooking.check_in_url && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4" onClick={() => setQrBooking(null)}>
+          <div
+            className="w-full max-w-md rounded-[2rem] border border-white/10 bg-forest-950 p-6 text-center shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 className="text-2xl font-black">{t("booking.qrTitle")}</h3>
+            <p className="mt-2 font-mono text-2xl font-black tracking-wider text-forest-400">{qrBooking.booking_number}</p>
+            <p className="mt-1 text-sm text-white/60">{qrBooking.customer_name}</p>
+            <BookingQrCode checkInUrl={qrBooking.check_in_url} size={240} className="mt-6" />
+            <a
+              href={qrBooking.check_in_url}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-4 inline-block text-sm font-bold text-forest-300 hover:underline"
+            >
+              {t("checkIn.openBookingPage")}
+            </a>
+            <button
+              type="button"
+              onClick={() => setQrBooking(null)}
+              className="mt-6 w-full rounded-2xl border border-white/10 px-5 py-3 font-bold"
+            >
+              {t("admin.close")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {waiverBooking && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4" onClick={() => setWaiverBooking(null)}>
+          <div
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-white/10 bg-forest-950 p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 className="text-2xl font-black">{t("admin.viewWaiver")}</h3>
+            <p className="mt-2 text-sm text-white/60">
+              {waiverBooking.booking_number} · {waiverBooking.customer_name}
+              {waiverBooking.national_id ? ` · ${waiverBooking.national_id}` : ""}
+            </p>
+            {waiverLoading && <p className="mt-6 text-white/50">{t("availability.loading")}</p>}
+            {!waiverLoading && waiverData?.waiver_text && (
+              <>
+                {waiverData.waiver_accepted_at && (
+                  <p className="mt-3 text-xs text-forest-300">
+                    {t("admin.waiverSignedAt")}: {new Date(waiverData.waiver_accepted_at).toLocaleString()}
+                  </p>
+                )}
+                <pre
+                  dir={waiverData.waiver_language?.startsWith("ar") ? "rtl" : "ltr"}
+                  className="mt-4 whitespace-pre-wrap rounded-xl border border-white/10 bg-black/30 p-4 text-sm leading-relaxed text-white/85"
+                >
+                  {waiverData.waiver_text}
+                </pre>
+              </>
+            )}
+            {!waiverLoading && !waiverData?.waiver_text && (
+              <p className="mt-6 text-sm text-white/50">{t("admin.noWaiver")}</p>
+            )}
+            <button
+              type="button"
+              onClick={() => setWaiverBooking(null)}
+              className="mt-6 rounded-2xl border border-white/10 px-5 py-3 font-bold"
+            >
+              {t("admin.close")}
+            </button>
           </div>
         </div>
       )}

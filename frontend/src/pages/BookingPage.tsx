@@ -1,13 +1,15 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { CheckCircle2 } from "lucide-react";
-import { api, BookingPayload, PaymentTransferInfo, RouteExperience, Vehicle } from "../api/client";
+import { api, BookingPayload, BookingResult, PaymentTransferInfo, RouteExperience, Vehicle } from "../api/client";
 import { BankTransferModal } from "../components/BankTransferModal";
+import { BookingConfirmationCard } from "../components/BookingConfirmationCard";
 import { BookingSelection, BookingSummaryCard, BookingWidget, calculateTotal } from "../components/Booking";
+import { LiabilityWaiver } from "../components/LiabilityWaiver";
 import { PageShell } from "../components/Layout";
 import { defaultTransferSettings } from "../components/AdminTransferSettings";
-import { defaultBookingSelection, clearBookingDraft, resolveInitialBookingSelection, saveBookingDraft } from "../lib/bookingDraft";
+import { defaultBookingSelection, clearBookingDraft, isBookingSelectionReady, resolveInitialBookingSelection, saveBookingDraft } from "../lib/bookingDraft";
 
 const defaultSelection = defaultBookingSelection;
 
@@ -16,12 +18,13 @@ const inputClass = "w-full rounded-2xl border border-white/10 bg-white/10 px-4 p
 const emptyTransferInfo: PaymentTransferInfo = { ...defaultTransferSettings };
 
 export default function BookingPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const location = useLocation();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [routes, setRoutes] = useState<RouteExperience[]>([]);
   const [selection, setSelection] = useState<BookingSelection>(() => resolveInitialBookingSelection(location.state));
   const [confirmed, setConfirmed] = useState(false);
+  const [confirmedBooking, setConfirmedBooking] = useState<BookingResult | null>(null);
   const [bookingNumber, setBookingNumber] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("visa");
@@ -31,8 +34,10 @@ export default function BookingPage() {
     customer_name: "",
     phone: "",
     email: "",
+    national_id: "",
     notes: ""
   });
+  const [waiverAccepted, setWaiverAccepted] = useState(false);
 
   useEffect(() => {
     Promise.all([api.getVehicles(), api.getRoutes(), api.getSiteContent().catch(() => null)]).then(
@@ -78,25 +83,44 @@ export default function BookingPage() {
   }, [selection]);
 
   useEffect(() => {
-    if (!confirmed) return;
-    const timer = window.setTimeout(() => {
-      clearBookingDraft();
-      window.location.href = "/";
-    }, 5000);
-    return () => window.clearTimeout(timer);
-  }, [confirmed]);
+    setWaiverAccepted(false);
+  }, [form.customer_name, form.national_id, form.phone, form.email]);
+
+  useEffect(() => {
+    if (!waiverAccepted) {
+      setShowTransferModal(false);
+    }
+  }, [waiverAccepted]);
+
+  function finishConfirmation() {
+    clearBookingDraft();
+    window.location.href = "/";
+  }
+
+  const handleConfirmationRedirect = useCallback(() => {
+    finishConfirmation();
+  }, []);
 
   async function submitBooking(event: FormEvent) {
     event.preventDefault();
     setSubmitError("");
-    if (!selection.date || !selection.time || !selection.fleetUnitId || !selection.routeId) {
+    if (!isBookingSelectionReady(selection)) {
       setSubmitError(t("booking.unavailable"));
+      return;
+    }
+    if (!waiverAccepted) {
+      setSubmitError(t("booking.waiverRequired"));
+      return;
+    }
+    if (!paymentMethod) {
+      setSubmitError(t("booking.paymentLocked"));
       return;
     }
     const payload: BookingPayload = {
       customer_name: form.customer_name.trim(),
       phone: form.phone.trim(),
       email: form.email.trim(),
+      national_id: form.national_id.trim(),
       nationality: "Guest",
       hotel_location: "",
       notes: form.notes.trim() || undefined,
@@ -104,13 +128,17 @@ export default function BookingPage() {
       time: selection.time,
       vehicle_id: selection.vehicleId,
       route_id: selection.routeId,
-      fleet_unit_id: selection.fleetUnitId,
+      fleet_unit_ids: selection.fleetUnitIds,
       passengers: selection.passengers,
+      booking_mode: selection.bookingMode,
       total_price: calculateTotal(selection),
-      payment_method: paymentMethod
+      payment_method: paymentMethod,
+      waiver_accepted: true,
+      waiver_language: i18n.language.startsWith("ar") ? "ar" : "en"
     };
     try {
       const result = await api.createBooking(payload);
+      setConfirmedBooking(result);
       setBookingNumber(result.booking_number);
       setConfirmed(true);
     } catch (error) {
@@ -118,9 +146,15 @@ export default function BookingPage() {
     }
   }
 
-  const canSubmit = selection.date && selection.time && selection.fleetUnitId && selection.routeId;
+  const canChoosePayment = waiverAccepted;
+
+  const canSubmit =
+    isBookingSelectionReady(selection) &&
+    Boolean(form.customer_name.trim() && form.phone.trim() && form.email.trim() && form.national_id.trim()) &&
+    waiverAccepted;
 
   function selectPaymentMethod(method: string) {
+    if (!canChoosePayment) return;
     setPaymentMethod(method);
     if (method === "bank_transfer") {
       setShowTransferModal(true);
@@ -135,16 +169,23 @@ export default function BookingPage() {
             <p className="text-sm font-bold uppercase tracking-[0.3em] text-forest-400">{t("nav.book")}</p>
             <h1 className="mt-3 text-5xl font-black">{t("booking.quickTitle")}</h1>
           </div>
-          {confirmed ? (
+          {confirmed && confirmedBooking ? (
+            <BookingConfirmationCard
+              booking={confirmedBooking}
+              routeName={
+                routes.find((route) => route.id === confirmedBooking.route_id)?.[
+                  i18n.language.startsWith("ar") ? "name_ar" : "name_en"
+                ]
+              }
+              onRedirect={handleConfirmationRedirect}
+            />
+          ) : confirmed ? (
             <div className="glass mx-auto max-w-2xl rounded-[2rem] p-10 text-center">
               <CheckCircle2 className="mx-auto text-forest-400" size={72} />
               <h2 className="mt-6 text-3xl font-black">{t("booking.confirmed")}</h2>
               {bookingNumber && (
                 <p className="mt-4 text-4xl font-black tracking-[0.2em] text-forest-400">{bookingNumber}</p>
               )}
-              <p className="mt-4 text-white/65">{t("booking.confirmedEmail")}</p>
-              <p className="mt-2 text-sm text-white/55">{t("booking.saveBookingNumber")}</p>
-              <p className="mt-2 text-sm text-white/45">{t("booking.redirecting")}</p>
             </div>
           ) : (
             <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
@@ -166,32 +207,66 @@ export default function BookingPage() {
                       <input required type="email" className={inputClass} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
                     </label>
                     <label className="space-y-2 md:col-span-2">
+                      <span className="text-sm font-semibold text-white/75">{t("booking.nationalId")}</span>
+                      <input
+                        required
+                        type="text"
+                        className={inputClass}
+                        value={form.national_id}
+                        onChange={(event) => setForm({ ...form, national_id: event.target.value })}
+                        placeholder={t("booking.nationalIdPlaceholder")}
+                      />
+                    </label>
+                    <label className="space-y-2 md:col-span-2">
                       <span className="text-sm font-semibold text-white/75">{t("booking.notice")}</span>
                       <textarea className={inputClass} rows={4} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder={t("booking.noticeOptional")} />
                     </label>
                   </div>
-                  <div className="mt-8">
+                  <LiabilityWaiver
+                    customerName={form.customer_name}
+                    nationalId={form.national_id}
+                    phone={form.phone}
+                    email={form.email}
+                    rideDate={selection.date && selection.time ? `${selection.date} ${selection.time}` : ""}
+                    accepted={waiverAccepted}
+                    onAcceptedChange={setWaiverAccepted}
+                  />
+                  <div className={`mt-8 transition ${canChoosePayment ? "" : "opacity-50"}`}>
                     <h3 className="text-xl font-black">{t("booking.payment")}</h3>
-                    <div className="mt-4 grid gap-4 md:grid-cols-2">
-                      {[
-                        ["visa", t("booking.payVisa")],
-                        ["bank_transfer", t("booking.payTransfer")]
-                      ].map(([value, label]) => (
-                        <label key={value} className="flex cursor-pointer items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                          <input type="radio" checked={paymentMethod === value} onChange={() => selectPaymentMethod(value)} />
-                          <span className="font-semibold">{label}</span>
-                        </label>
-                      ))}
-                    </div>
-                    {paymentMethod === "bank_transfer" && (
-                      <button
-                        type="button"
-                        onClick={() => setShowTransferModal(true)}
-                        className="mt-3 text-sm font-bold text-forest-300 underline-offset-2 hover:underline"
-                      >
-                        {t("booking.viewTransferDetails")}
-                      </button>
+                    {!canChoosePayment && (
+                      <p className="mt-2 text-sm text-amber-200/80">{t("booking.paymentLocked")}</p>
                     )}
+                    <fieldset disabled={!canChoosePayment} className="mt-4 border-0 p-0 disabled:cursor-not-allowed">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        {[
+                          ["visa", t("booking.payVisa")],
+                          ["bank_transfer", t("booking.payTransfer")]
+                        ].map(([value, label]) => (
+                          <label
+                            key={value}
+                            className={`flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 ${canChoosePayment ? "cursor-pointer" : "cursor-not-allowed"}`}
+                          >
+                            <input
+                              type="radio"
+                              checked={paymentMethod === value}
+                              disabled={!canChoosePayment}
+                              onChange={() => selectPaymentMethod(value)}
+                            />
+                            <span className="font-semibold">{label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {paymentMethod === "bank_transfer" && (
+                        <button
+                          type="button"
+                          disabled={!canChoosePayment}
+                          onClick={() => canChoosePayment && setShowTransferModal(true)}
+                          className="mt-3 text-sm font-bold text-forest-300 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60"
+                        >
+                          {t("booking.viewTransferDetails")}
+                        </button>
+                      )}
+                    </fieldset>
                   </div>
                   {submitError && <p className="mt-4 rounded-2xl bg-red-500/15 px-4 py-3 text-sm text-red-200">{submitError}</p>}
                   <button

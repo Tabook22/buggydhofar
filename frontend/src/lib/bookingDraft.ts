@@ -1,4 +1,5 @@
 import { BookingSelection } from "../components/Booking";
+import { bikesRequiredForPassengers, normalizeBookingMode } from "../api/client";
 
 const STORAGE_KEY = "khareef_booking_draft";
 
@@ -7,12 +8,19 @@ export const defaultBookingSelection: BookingSelection = {
   time: "",
   vehicleId: 0,
   routeId: 0,
-  fleetUnitId: 0,
-  passengers: 1
+  fleetUnitIds: [],
+  passengers: 1,
+  bookingMode: "group"
 };
 
 export function isBookingSelectionReady(selection: BookingSelection) {
-  return Boolean(selection.date && selection.time && selection.fleetUnitId && selection.routeId);
+  const bikesNeeded = bikesRequiredForPassengers(selection.passengers, selection.bookingMode);
+  return Boolean(
+    selection.date &&
+      selection.time &&
+      selection.routeId &&
+      selection.fleetUnitIds.length === bikesNeeded
+  );
 }
 
 export function saveBookingDraft(selection: BookingSelection) {
@@ -27,15 +35,29 @@ export function loadBookingDraft(): BookingSelection | null {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<BookingSelection>;
+    const parsed = JSON.parse(raw) as Partial<BookingSelection> & { fleetUnitId?: number };
     if (!parsed || typeof parsed !== "object") return null;
+
+    const legacyFleetUnitId = typeof parsed.fleetUnitId === "number" ? parsed.fleetUnitId : 0;
+    const fleetUnitIds = Array.isArray(parsed.fleetUnitIds)
+      ? parsed.fleetUnitIds.filter((id): id is number => typeof id === "number" && id > 0)
+      : legacyFleetUnitId
+        ? [legacyFleetUnitId]
+        : [];
+
+    const passengers =
+      typeof parsed.passengers === "number" && parsed.passengers >= 1
+        ? Math.min(Math.floor(parsed.passengers), 40)
+        : 1;
+
     return {
       date: typeof parsed.date === "string" ? parsed.date : "",
       time: typeof parsed.time === "string" ? parsed.time : "",
       vehicleId: typeof parsed.vehicleId === "number" ? parsed.vehicleId : 0,
       routeId: typeof parsed.routeId === "number" ? parsed.routeId : 0,
-      fleetUnitId: typeof parsed.fleetUnitId === "number" ? parsed.fleetUnitId : 0,
-      passengers: parsed.passengers === 2 ? 2 : 1
+      fleetUnitIds,
+      passengers,
+      bookingMode: normalizeBookingMode(parsed.bookingMode)
     };
   } catch {
     return null;
