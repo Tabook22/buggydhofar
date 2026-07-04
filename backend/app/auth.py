@@ -17,6 +17,9 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("KHAREEF_TOKEN_HOURS", "168"))
 bearer_scheme = HTTPBearer()
 
+ROLE_ADMIN = "admin"
+ROLE_SCANNER = "scanner"
+
 
 def hash_password(password: str) -> str:
     salt = os.urandom(16)
@@ -37,15 +40,21 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(subject: str) -> str:
+def normalize_role(role: str | None) -> str:
+    if role == ROLE_SCANNER:
+        return ROLE_SCANNER
+    return ROLE_ADMIN
+
+
+def create_access_token(subject: str, role: str = ROLE_ADMIN) -> str:
     expires = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
-    payload = {"sub": subject, "exp": int(expires.timestamp())}
+    payload = {"sub": subject, "role": normalize_role(role), "exp": int(expires.timestamp())}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def get_current_admin(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    db: Session = Depends(get_db),
+def _get_admin_from_token(
+    credentials: HTTPAuthorizationCredentials,
+    db: Session,
 ) -> models.Admin:
     try:
         payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
@@ -57,5 +66,29 @@ def get_current_admin(
 
     admin = db.query(models.Admin).filter(models.Admin.username == username).first()
     if not admin:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return admin
+
+
+def admin_role(admin: models.Admin) -> str:
+    return normalize_role(getattr(admin, "role", None) or ROLE_ADMIN)
+
+
+def get_current_admin(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> models.Admin:
+    admin = _get_admin_from_token(credentials, db)
+    if admin_role(admin) == ROLE_SCANNER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Scanner accounts must sign in at the staff portal.",
+        )
+    return admin
+
+
+def get_current_staff(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> models.Admin:
+    return _get_admin_from_token(credentials, db)

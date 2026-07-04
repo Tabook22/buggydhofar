@@ -212,7 +212,10 @@ def seed_database(db: Session) -> None:
                 db.add(models.Route(**route_data))
 
     if db.query(models.Admin).filter(models.Admin.username == "admin").first() is None:
-        db.add(models.Admin(username="admin", password_hash=hash_password("admin123")))
+        db.add(models.Admin(username="admin", password_hash=hash_password("admin123"), role="admin"))
+
+    if db.query(models.Admin).filter(models.Admin.username == "scanner").first() is None:
+        db.add(models.Admin(username="scanner", password_hash=hash_password("scanner123"), role="scanner"))
 
     if db.query(models.SiteContent).first() is None:
         db.add(models.SiteContent(**HOME_CONTENT))

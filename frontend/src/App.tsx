@@ -7,8 +7,8 @@ import ExperiencesPage from "./pages/ExperiencesPage";
 import FAQPage from "./pages/FAQPage";
 import ContactPage from "./pages/ContactPage";
 import AdminDashboard from "./pages/AdminDashboard";
+import StaffPortalPage from "./pages/StaffPortalPage";
 
-const StaffCheckInPage = lazy(() => import("./pages/StaffCheckInPage"));
 const AdminVerifyBookingPage = lazy(() => import("./pages/AdminVerifyBookingPage"));
 
 export default function App() {
@@ -17,14 +17,8 @@ export default function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/booking" element={<BookingPage />} />
       <Route path="/checkin/:token" element={<CheckInPage />} />
-      <Route
-        path="/admin/checkin"
-        element={
-          <Suspense fallback={null}>
-            <StaffCheckInPage />
-          </Suspense>
-        }
-      />
+      <Route path="/staff/*" element={<StaffPortalPage />} />
+      <Route path="/admin/checkin" element={<Navigate to="/staff/login" replace />} />
       <Route
         path="/admin/verify/:token"
         element={

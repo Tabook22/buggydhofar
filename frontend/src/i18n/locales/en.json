@@ -220,6 +220,17 @@
     "checkedIn": "Checked in",
     "openBookingPage": "Open check-in page"
   },
+  "staff": {
+    "portalTitle": "Staff check-in",
+    "portalSubtitle": "Sign in to scan customer booking QR codes and confirm arrival.",
+    "signIn": "Sign in to scan",
+    "loginFailed": "Could not sign in. Check username and password.",
+    "scanTitle": "Scan customer QR",
+    "scanSubtitle": "Point the camera at the customer's booking QR code.",
+    "logout": "Log out",
+    "openPortal": "Staff scanner",
+    "useStaffPortal": "Scanner accounts must sign in at /staff — not the admin panel."
+  },
   "faq": {
     "title": "Frequently Asked Questions",
     "items": [

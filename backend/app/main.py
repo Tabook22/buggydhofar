@@ -182,6 +182,21 @@ def backfill_check_in_tokens(db: Session) -> int:
     return len(missing)
 
 
+def ensure_admin_role_column() -> None:
+    with engine.begin() as connection:
+        existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(admins)"))}
+        if "role" not in existing_columns:
+            connection.execute(text("ALTER TABLE admins ADD COLUMN role TEXT DEFAULT 'admin'"))
+
+
+def backfill_scanner_user(db: Session) -> None:
+    from .auth import hash_password
+
+    if db.query(models.Admin).filter(models.Admin.username == "scanner").first() is None:
+        db.add(models.Admin(username="scanner", password_hash=hash_password("scanner123"), role="scanner"))
+        db.commit()
+
+
 def booking_check_in_out(booking: models.Booking, db: Session) -> schemas.BookingCheckInOut:
     route = db.get(models.Route, booking.route_id)
     units = fleet.booking_fleet_units(db, booking)
@@ -279,6 +294,7 @@ def startup() -> None:
     ensure_booking_tax_columns()
     ensure_booking_waiver_columns()
     ensure_booking_check_in_columns()
+    ensure_admin_role_column()
     ensure_payment_transfer_columns()
     db = SessionLocal()
     try:
@@ -303,6 +319,7 @@ def startup() -> None:
         fleet.backfill_booking_bikes(db)
         backfill_booking_tax(db)
         backfill_check_in_tokens(db)
+        backfill_scanner_user(db)
         seed_payment_transfer_defaults(db)
         process_expired_pending_bookings(db)
     finally:
@@ -507,12 +524,7 @@ def get_check_in_booking(token: str, db: Session = Depends(get_db)):
     return booking_check_in_out(booking, db)
 
 
-@app.post("/api/admin/check-in/{token}", response_model=schemas.BookingCheckInOut)
-def admin_check_in_booking(
-    token: str,
-    _: models.Admin = Depends(auth.get_current_admin),
-    db: Session = Depends(get_db),
-):
+def perform_booking_check_in(token: str, db: Session) -> schemas.BookingCheckInOut:
     booking = db.query(models.Booking).filter(models.Booking.check_in_token == token).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
@@ -526,6 +538,15 @@ def admin_check_in_booking(
     return booking_check_in_out(booking, db)
 
 
+@app.post("/api/admin/check-in/{token}", response_model=schemas.BookingCheckInOut)
+def admin_check_in_booking(
+    token: str,
+    _: models.Admin = Depends(auth.get_current_staff),
+    db: Session = Depends(get_db),
+):
+    return perform_booking_check_in(token, db)
+
+
 @app.post("/api/payments/create")
 def create_payment():
     return {"payment_url": "https://example.com/payments/demo", "status": "created"}
@@ -536,7 +557,38 @@ def admin_login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     admin = db.query(models.Admin).filter(models.Admin.username == payload.username).first()
     if not admin or not auth.verify_password(payload.password, admin.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    return {"access_token": auth.create_access_token(admin.username), "token_type": "bearer"}
+    role = auth.admin_role(admin)
+    if role == auth.ROLE_SCANNER:
+        raise HTTPException(status_code=403, detail="Scanner accounts must sign in at the staff portal.")
+    return {
+        "access_token": auth.create_access_token(admin.username, role),
+        "token_type": "bearer",
+        "role": role,
+        "username": admin.username,
+    }
+
+
+@app.post("/api/staff/login", response_model=schemas.TokenOut)
+def staff_login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
+    admin = db.query(models.Admin).filter(models.Admin.username == payload.username).first()
+    if not admin or not auth.verify_password(payload.password, admin.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    role = auth.admin_role(admin)
+    return {
+        "access_token": auth.create_access_token(admin.username, role),
+        "token_type": "bearer",
+        "role": role,
+        "username": admin.username,
+    }
+
+
+@app.post("/api/staff/check-in/{token}", response_model=schemas.BookingCheckInOut)
+def staff_check_in_booking(
+    token: str,
+    _: models.Admin = Depends(auth.get_current_staff),
+    db: Session = Depends(get_db),
+):
+    return perform_booking_check_in(token, db)
 
 
 @app.get("/api/admin/bookings", response_model=list[schemas.BookingAdminOut])

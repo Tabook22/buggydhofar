@@ -203,10 +203,10 @@ export function AdminBookingsPanel({
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Link
-            to="/admin/checkin"
+            to="/staff/scan"
             className="rounded-2xl bg-forest-500/20 px-4 py-2 text-sm font-bold text-forest-200 hover:bg-forest-500/30"
           >
-            {t("checkIn.openScanner")}
+            {t("staff.openPortal")}
           </Link>
           <p className="text-sm font-bold text-forest-300">
             {t("admin.archiveTotal", { count: archive?.total ?? 0 })}

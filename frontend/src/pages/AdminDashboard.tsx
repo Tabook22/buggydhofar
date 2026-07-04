@@ -216,6 +216,10 @@ export default function AdminDashboard() {
     setLoginMessage(null);
     try {
       const response = await api.adminLogin(login.username, login.password);
+      if (response.role === "scanner") {
+        setLoginMessage(t("staff.useStaffPortal"));
+        return;
+      }
       localStorage.setItem("khareef-admin-token", response.access_token);
       setToken(response.access_token);
       await loadAdminData(response.access_token);

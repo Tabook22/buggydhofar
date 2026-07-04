@@ -331,6 +331,18 @@ export function clearAdminToken() {
 }
 
 export const ADMIN_TOKEN_KEY = "khareef-admin-token";
+export const STAFF_TOKEN_KEY = "khareef-staff-token";
+
+export type AuthTokenResponse = {
+  access_token: string;
+  token_type: string;
+  role: string;
+  username: string;
+};
+
+export function clearStaffToken() {
+  localStorage.removeItem(STAFF_TOKEN_KEY);
+}
 
 export const api = {
   getVehicles: () => request<Vehicle[]>("/api/vehicles"),
@@ -349,13 +361,23 @@ export const api = {
       body: JSON.stringify(payload)
     }),
   getCheckInBooking: (token: string) => request<BookingCheckIn>(`/api/check-in/${encodeURIComponent(token)}`),
+  staffCheckIn: (token: string, staffToken: string) =>
+    request<BookingCheckIn>(`/api/staff/check-in/${encodeURIComponent(token)}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${staffToken}` }
+    }),
   adminCheckIn: (token: string, adminToken: string) =>
     request<BookingCheckIn>(`/api/admin/check-in/${encodeURIComponent(token)}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${adminToken}` }
     }),
+  staffLogin: (username: string, password: string) =>
+    request<AuthTokenResponse>("/api/staff/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password })
+    }),
   adminLogin: (username: string, password: string) =>
-    request<{ access_token: string; token_type: string }>("/api/admin/login", {
+    request<AuthTokenResponse>("/api/admin/login", {
       method: "POST",
       body: JSON.stringify({ username, password })
     }),
