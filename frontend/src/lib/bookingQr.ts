@@ -1,6 +1,7 @@
 export function buildCheckInUrl(token: string): string {
-  const base = (import.meta.env.VITE_PUBLIC_SITE_URL || window.location.origin).replace(/\/$/, "");
-  return `${base}/checkin/${token}`;
+  const configured = import.meta.env.VITE_PUBLIC_SITE_URL?.replace(/\/$/, "");
+  const base = configured || (typeof window !== "undefined" ? window.location.origin : "https://buggydhofar.com");
+  return `${base.replace(/\/$/, "")}/checkin/${token}`;
 }
 
 export function qrCodeImageUrl(data: string, size = 220): string {

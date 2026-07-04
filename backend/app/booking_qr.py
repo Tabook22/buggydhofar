@@ -8,8 +8,11 @@ from sqlalchemy.orm import Session
 from . import models
 
 
+PRODUCTION_SITE_URL = "https://buggydhofar.com"
+
+
 def public_site_url() -> str:
-    return os.getenv("PUBLIC_SITE_URL", "http://localhost:5173").rstrip("/")
+    return os.getenv("PUBLIC_SITE_URL", PRODUCTION_SITE_URL).rstrip("/")
 
 
 def generate_check_in_token() -> str:

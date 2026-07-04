@@ -11,6 +11,12 @@ git pull
 cd backend
 source .venv/bin/activate
 pip install -r requirements.txt
+
+if [[ -f .env ]] && ! grep -q '^PUBLIC_SITE_URL=' .env; then
+  echo "PUBLIC_SITE_URL=https://buggydhofar.com" >> .env
+  echo "Added PUBLIC_SITE_URL=https://buggydhofar.com to backend/.env"
+fi
+
 sudo systemctl restart "$SERVICE_NAME"
 
 cd ../frontend

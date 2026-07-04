@@ -30,6 +30,11 @@ if [[ ! -f .env ]]; then
   echo "    Edit backend/.env to add SMTP settings before going live."
 fi
 
+if ! grep -q '^PUBLIC_SITE_URL=' .env 2>/dev/null; then
+  echo "PUBLIC_SITE_URL=https://buggydhofar.com" >> .env
+  echo "==> Added PUBLIC_SITE_URL to backend/.env"
+fi
+
 echo "==> Frontend: install + build"
 cd "$APP_DIR/frontend"
 npm install
