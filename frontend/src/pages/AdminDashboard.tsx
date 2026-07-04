@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { api, clearAdminToken, FleetUnit, isAdminAuthError, RouteExperience, SiteContent, Vehicle } from "../api/client";
 import { RealMapPathPicker, RealMapRoutePreview } from "../components/RealMapRoute";
 import { AdminBookingsPanel } from "../components/AdminBookingsPanel";
+import { AdminBookingLinkQr } from "../components/AdminBookingLinkQr";
 import { AdminTransferSettings, defaultTransferSettings } from "../components/AdminTransferSettings";
 
 type Stats = {
@@ -539,6 +540,8 @@ export default function AdminDashboard() {
             </div>
           ))}
         </section>
+
+        <AdminBookingLinkQr />
 
         <AdminBookingsPanel token={token} onAuthFailure={handleAuthFailure} />
 

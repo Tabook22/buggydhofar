@@ -1,3 +1,9 @@
+export function buildPublicBookingUrl(): string {
+  const configured = import.meta.env.VITE_PUBLIC_SITE_URL?.replace(/\/$/, "");
+  const base = configured || (typeof window !== "undefined" ? window.location.origin : "https://buggydhofar.com");
+  return `${base.replace(/\/$/, "")}/booking`;
+}
+
 export function buildCheckInUrl(token: string): string {
   const configured = import.meta.env.VITE_PUBLIC_SITE_URL?.replace(/\/$/, "");
   const base = configured || (typeof window !== "undefined" ? window.location.origin : "https://buggydhofar.com");

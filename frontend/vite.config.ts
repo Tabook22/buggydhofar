@@ -6,9 +6,7 @@ export default defineConfig(({ mode }) => ({
   define:
     mode === "production"
       ? {
-          "import.meta.env.VITE_PUBLIC_SITE_URL": JSON.stringify(
-            process.env.VITE_PUBLIC_SITE_URL || "https://buggydhofar.com"
-          )
+          "import.meta.env.VITE_PUBLIC_SITE_URL": JSON.stringify("https://buggydhofar.com")
         }
       : undefined,
   resolve: {
