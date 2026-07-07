@@ -357,6 +357,26 @@ def get_site_content(db: Session = Depends(get_db)):
     return content
 
 
+@app.post("/api/contact", response_model=schemas.ContactOut)
+def submit_contact(payload: schemas.ContactCreate):
+    if payload.website.strip():
+        return {"status": "sent", "message": "Thank you. We will be in touch soon."}
+
+    status, error = email_service.send_contact_message(
+        full_name=payload.full_name.strip(),
+        phone=payload.phone.strip(),
+        email=str(payload.email).strip(),
+        message=payload.message.strip(),
+    )
+    if status == "failed":
+        raise HTTPException(status_code=502, detail=error or "Unable to send your message. Please try again later.")
+
+    return {
+        "status": status,
+        "message": "Thank you. We have received your message and will reply soon.",
+    }
+
+
 @app.get("/api/time-slots")
 def get_time_slots():
     return {"slots": pricing.TIME_SLOTS}

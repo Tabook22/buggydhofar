@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class FleetUnitBase(BaseModel):
@@ -371,3 +371,16 @@ class SiteContentOut(SiteContentBase):
 
     class Config:
         from_attributes = True
+
+
+class ContactCreate(BaseModel):
+    full_name: str = Field(min_length=2, max_length=150)
+    phone: str = Field(min_length=5, max_length=50)
+    email: EmailStr
+    message: str = Field(min_length=10, max_length=5000)
+    website: str = ""
+
+
+class ContactOut(BaseModel):
+    status: str
+    message: str

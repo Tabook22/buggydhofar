@@ -368,6 +368,19 @@ export type AuthTokenResponse = {
   username: string;
 };
 
+export type ContactPayload = {
+  full_name: string;
+  phone: string;
+  email: string;
+  message: string;
+  website?: string;
+};
+
+export type ContactResponse = {
+  status: string;
+  message: string;
+};
+
 export function clearStaffToken() {
   localStorage.removeItem(STAFF_TOKEN_KEY);
 }
@@ -385,6 +398,11 @@ export const api = {
     request<{ available: boolean; available_count: number; total_bikes: number; message: string }>(`/api/availability?${params.toString()}`),
   createBooking: (payload: BookingPayload) =>
     request<BookingResult>("/api/bookings", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  submitContact: (payload: ContactPayload) =>
+    request<ContactResponse>("/api/contact", {
       method: "POST",
       body: JSON.stringify(payload)
     }),

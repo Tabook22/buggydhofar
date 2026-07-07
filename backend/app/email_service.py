@@ -319,28 +319,41 @@ def _save_dev_copy(kind: str, recipient: str, subject: str, plain: str) -> Path:
     return path
 
 
-def _deliver_email(recipient: str, subject: str, plain: str, html: str) -> tuple[str, str | None]:
+def _deliver_email(
+    recipient: str,
+    subject: str,
+    plain: str,
+    html: str,
+    *,
+    reply_to: str | None = None,
+) -> tuple[str, str | None]:
     smtp_host = os.getenv("SMTP_HOST", "").strip()
     if not smtp_host:
         _save_dev_copy("email", recipient, subject, plain)
         return "saved_dev", None
 
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    use_tls = os.getenv("SMTP_USE_TLS", "true").lower() in {"1", "true", "yes"}
+    smtp_port = int(os.getenv("SMTP_PORT", "465"))
     smtp_user = os.getenv("SMTP_USER", "").strip()
     smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
+    use_ssl = os.getenv("SMTP_USE_SSL", "").lower() in {"1", "true", "yes"} or smtp_port == 465
+    use_tls = os.getenv("SMTP_USE_TLS", "false").lower() in {"1", "true", "yes"}
 
     message = MIMEMultipart("alternative")
     message["Subject"] = subject
     message["From"] = f"{FROM_NAME} <{FROM_EMAIL}>"
     message["To"] = recipient
-    message["Reply-To"] = FROM_EMAIL
+    message["Reply-To"] = reply_to or FROM_EMAIL
     message.attach(MIMEText(plain, "plain", "utf-8"))
     message.attach(MIMEText(html, "html", "utf-8"))
 
     try:
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
-            if use_tls:
+        if use_ssl:
+            server_factory = lambda: smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30)
+        else:
+            server_factory = lambda: smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+
+        with server_factory() as server:
+            if not use_ssl and use_tls:
                 server.starttls()
             if smtp_user and smtp_password:
                 server.login(smtp_user, smtp_password)
@@ -571,3 +584,85 @@ Buggy Dhofar Admin
         logger.exception("Failed to notify admin about expired booking #%s", booking_id)
     finally:
         db.close()
+
+
+CONTACT_ADMIN_SUBJECT = "New contact form message — Buggy Dhofar"
+CONTACT_AUTO_REPLY_SUBJECT = "We received your message — Buggy Dhofar"
+
+
+def _build_contact_admin_bodies(full_name: str, phone: str, email: str, message: str) -> tuple[str, str]:
+    escaped_message = html.escape(message)
+    plain = f"""New message from the Buggy Dhofar contact form
+
+Name: {full_name}
+Email: {email}
+Phone: {phone}
+
+Message:
+{message}
+
+Reply directly to this visitor at {email}.
+"""
+    html_body = f"""<!DOCTYPE html>
+<html>
+<body style="font-family:Arial,sans-serif;line-height:1.6;color:#1a1a1a;max-width:560px">
+  <h2 style="color:#1f7a4f">New contact form message</h2>
+  <table style="width:100%;border-collapse:collapse;margin:16px 0">
+    <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Name</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{html.escape(full_name)}</td></tr>
+    <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Email</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee"><a href="mailto:{html.escape(email)}">{html.escape(email)}</a></td></tr>
+    <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Phone</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{html.escape(phone)}</td></tr>
+  </table>
+  <h3 style="color:#1f7a4f;margin-bottom:8px">Message</h3>
+  <p style="white-space:pre-wrap;background:#f7f7f7;padding:16px;border-radius:8px;border:1px solid #eee">{escaped_message}</p>
+  <p style="color:#555;font-size:13px">Reply directly to the visitor — their address is set as Reply-To on this email.</p>
+</body>
+</html>"""
+    return plain, html_body
+
+
+def _build_contact_auto_reply_bodies(full_name: str) -> tuple[str, str]:
+    plain = f"""Dear {full_name},
+
+Thank you for contacting Buggy Dhofar. We have received your message and will get back to you as soon as possible.
+
+Salalah, Dhofar, Oman
+info@buggydhofar.com
+
+Buggy Dhofar
+"""
+    html_body = f"""<!DOCTYPE html>
+<html>
+<body style="font-family:Arial,sans-serif;line-height:1.6;color:#1a1a1a;max-width:560px">
+  <h2 style="color:#1f7a4f">Thank you for contacting us</h2>
+  <p>Dear {html.escape(full_name)},</p>
+  <p>We have received your message and will reply as soon as possible.</p>
+  <p style="color:#1f7a4f;font-weight:bold">Buggy Dhofar<br>info@buggydhofar.com<br>Salalah, Dhofar, Oman</p>
+</body>
+</html>"""
+    return plain, html_body
+
+
+def send_contact_message(full_name: str, phone: str, email: str, message: str) -> tuple[str, str | None]:
+    admin_email = os.getenv("ADMIN_NOTIFY_EMAIL", FROM_EMAIL).strip() or FROM_EMAIL
+    admin_plain, admin_html = _build_contact_admin_bodies(full_name, phone, email, message)
+    status, error = _deliver_email(
+        admin_email,
+        CONTACT_ADMIN_SUBJECT,
+        admin_plain,
+        admin_html,
+        reply_to=email,
+    )
+    if status == "failed":
+        return status, error
+
+    auto_plain, auto_html = _build_contact_auto_reply_bodies(full_name)
+    auto_status, auto_error = _deliver_email(email, CONTACT_AUTO_REPLY_SUBJECT, auto_plain, auto_html)
+    if auto_status == "failed":
+        logger.warning("Contact auto-reply failed for %s: %s", email, auto_error)
+
+    if status == "sent":
+        logger.info("Contact form message sent to %s from %s", admin_email, email)
+    elif status == "saved_dev":
+        logger.info("Contact form message saved locally from %s", email)
+
+    return status, error

@@ -261,7 +261,11 @@
     "title": "Contact Us",
     "subtitle": "Planning a group ride or hotel pickup? Send us your details.",
     "send": "Send Message",
-    "message": "Message"
+    "sending": "Sending…",
+    "message": "Message",
+    "location": "Salalah, Dhofar, Oman",
+    "success": "Thank you! We received your message and will reply soon.",
+    "error": "Unable to send your message. Please try again or email info@buggydhofar.com directly."
   },
   "admin": {
     "login": "Admin Login",
