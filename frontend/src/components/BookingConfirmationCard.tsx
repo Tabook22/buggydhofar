@@ -10,6 +10,9 @@ type BookingConfirmationCardProps = {
   booking: BookingResult;
   routeName?: string;
   onRedirect: () => void;
+  onPayOnline?: () => void;
+  payingOnline?: boolean;
+  paymentError?: string;
 };
 
 function paymentLabel(method: string, t: (key: string) => string) {
@@ -18,7 +21,14 @@ function paymentLabel(method: string, t: (key: string) => string) {
   return method;
 }
 
-export function BookingConfirmationCard({ booking, routeName, onRedirect }: BookingConfirmationCardProps) {
+export function BookingConfirmationCard({
+  booking,
+  routeName,
+  onRedirect,
+  onPayOnline,
+  payingOnline = false,
+  paymentError = ""
+}: BookingConfirmationCardProps) {
   const { t } = useTranslation();
   const [secondsLeft, setSecondsLeft] = useState(REDIRECT_SECONDS);
 
@@ -38,6 +48,20 @@ export function BookingConfirmationCard({ booking, routeName, onRedirect }: Book
 
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = String(secondsLeft % 60).padStart(2, "0");
+
+  const paymentStatusLabel =
+    booking.payment_status === "paid"
+      ? t("booking.paymentPaid")
+      : booking.payment_method === "visa"
+        ? t("booking.paymentPendingOnline")
+        : t("booking.paymentPendingTransfer");
+
+  const bookingStatusLabel =
+    booking.booking_status === "paid"
+      ? t("booking.statusConfirmed")
+      : booking.booking_status === "cancelled"
+        ? t("booking.statusCancelled")
+        : t("booking.statusPending");
 
   return (
     <div className="glass mx-auto max-w-3xl rounded-[2rem] p-8 md:p-10">
@@ -65,7 +89,8 @@ export function BookingConfirmationCard({ booking, routeName, onRedirect }: Book
               [t("booking.buggyBike"), bikesLabel],
               [t("booking.total"), `${booking.total_price} ${t("booking.omr")}`],
               [t("booking.payment"), paymentLabel(booking.payment_method, t)],
-              [t("booking.bookingStatus"), booking.booking_status === "paid" ? t("booking.statusConfirmed") : booking.booking_status === "cancelled" ? t("booking.statusCancelled") : t("booking.statusPending")]
+              [t("booking.paymentStatus"), paymentStatusLabel],
+              [t("booking.bookingStatus"), bookingStatusLabel]
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between gap-4 border-b border-white/5 pb-2">
                 <dt className="text-white/55">{label}</dt>
@@ -80,6 +105,21 @@ export function BookingConfirmationCard({ booking, routeName, onRedirect }: Book
           {booking.check_in_url && <BookingQrCode checkInUrl={booking.check_in_url} size={200} hintKey="booking.passQrHint" />}
         </div>
       </div>
+
+      {onPayOnline && (
+        <div className="mt-8 text-center">
+          {paymentError && <p className="mb-3 rounded-2xl bg-red-500/15 px-4 py-3 text-sm text-red-200">{paymentError}</p>}
+          <button
+            type="button"
+            disabled={payingOnline}
+            onClick={onPayOnline}
+            className="rounded-2xl bg-forest-500 px-8 py-4 font-bold text-white shadow-glow transition hover:bg-forest-400 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {payingOnline ? t("booking.paymentProcessing") : t("booking.payNow")}
+          </button>
+          <p className="mt-3 text-sm text-white/55">{t("booking.paymentPendingOnlineHint")}</p>
+        </div>
+      )}
 
       <p className="mt-8 text-center text-sm text-white/55">{t("booking.saveBookingNumber")}</p>
       <p className="mt-2 text-center text-sm text-white/45">

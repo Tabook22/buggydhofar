@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import extract, func, text
 from sqlalchemy.orm import Session
 
-from . import auth, booking_archive, booking_lifecycle, booking_numbers, booking_qr, email_service, fleet, models, pricing, routes_geo, schemas, waiver
+from . import auth, amwal, booking_archive, booking_lifecycle, booking_numbers, booking_qr, email_service, fleet, models, pricing, routes_geo, schemas, waiver
 from .database import Base, SessionLocal, engine, get_db
 from .seed import seed_database, seed_payment_transfer_defaults
 
@@ -547,9 +547,112 @@ def admin_check_in_booking(
     return perform_booking_check_in(token, db)
 
 
+@app.post("/api/payments/amwal/init", response_model=schemas.AmwalSmartBoxConfigOut)
+def init_amwal_payment(payload: schemas.AmwalInitRequest, db: Session = Depends(get_db)):
+    if not amwal.amwal_configured():
+        raise HTTPException(status_code=503, detail="Online payment is not configured yet.")
+    booking = db.get(models.Booking, payload.booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.payment_method != "visa":
+        raise HTTPException(status_code=400, detail="This booking does not use online card payment.")
+    if booking.payment_status == "paid":
+        raise HTTPException(status_code=400, detail="This booking is already paid.")
+    language = "ar" if payload.language_id.startswith("ar") else "en"
+    config = amwal.build_smartbox_configure(
+        amount=booking.total_price,
+        merchant_reference=booking.booking_number,
+        language_id=language,
+    )
+    return schemas.AmwalSmartBoxConfigOut(
+        booking_id=booking.id,
+        booking_number=booking.booking_number,
+        script_url=config["scriptUrl"],
+        mid=config["MID"],
+        tid=config["TID"],
+        currency_id=config["CurrencyId"],
+        amount_trxn=config["AmountTrxn"],
+        merchant_reference=config["MerchantReference"],
+        language_id=config["LanguageId"],
+        payment_view_type=config["PaymentViewType"],
+        trx_date_time=config["TrxDateTime"],
+        session_token=config["SessionToken"],
+        contact_info_type=config["ContactInfoType"],
+        return_url=config["ReturnUrl"],
+        cancel_url=config["CancelUrl"],
+        ignore_receipt=config["IgnoreReceipt"],
+        secure_hash=config["SecureHash"],
+        primary_color=config["primaryColor"],
+    )
+
+
+def _mark_booking_paid(booking: models.Booking, db: Session, background_tasks: BackgroundTasks | None = None) -> None:
+    previous_status = booking.booking_status
+    booking.payment_status = "paid"
+    booking.booking_status = "paid"
+    db.commit()
+    db.refresh(booking)
+    if background_tasks and previous_status != "paid":
+        background_tasks.add_task(email_service.send_booking_confirmed_task, booking.id)
+
+
+@app.post("/api/payments/amwal/complete", response_model=schemas.AmwalPaymentResultOut)
+def complete_amwal_payment(
+    payload: schemas.AmwalCompleteRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    if not amwal.amwal_configured():
+        raise HTTPException(status_code=503, detail="Online payment is not configured yet.")
+    booking = db.get(models.Booking, payload.booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.payment_status == "paid":
+        return schemas.AmwalPaymentResultOut(
+            success=True,
+            payment_status="paid",
+            booking_status=booking.booking_status,
+            message="Already paid.",
+        )
+    callback_data = payload.model_dump(exclude={"booking_id"}, exclude_none=True)
+    if not amwal.verify_callback_secure_hash(callback_data):
+        raise HTTPException(status_code=400, detail="Payment verification failed.")
+    if payload.merchantReference and payload.merchantReference != booking.booking_number:
+        raise HTTPException(status_code=400, detail="Booking reference mismatch.")
+    if not amwal.is_success_response_code(payload.responseCode):
+        return schemas.AmwalPaymentResultOut(
+            success=False,
+            payment_status=booking.payment_status,
+            booking_status=booking.booking_status,
+            message="Payment was not successful.",
+        )
+    _mark_booking_paid(booking, db, background_tasks)
+    return schemas.AmwalPaymentResultOut(
+        success=True,
+        payment_status="paid",
+        booking_status="paid",
+        message="Payment successful.",
+    )
+
+
+@app.post("/api/payments/amwal/notify")
+def amwal_cloud_notification(payload: dict, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    if not amwal.amwal_configured():
+        raise HTTPException(status_code=503, detail="Online payment is not configured yet.")
+    if not amwal.verify_cloud_notification_secure_hash(payload):
+        raise HTTPException(status_code=400, detail="Invalid notification signature.")
+    merchant_reference = payload.get("MerchantReference")
+    if not merchant_reference:
+        return {"success": True, "message": "success"}
+    booking = db.query(models.Booking).filter(models.Booking.booking_number == str(merchant_reference)).first()
+    if booking and booking.payment_status != "paid" and amwal.is_success_response_code(payload.get("ResponseCode")):
+        _mark_booking_paid(booking, db, background_tasks)
+    return {"success": True, "message": "success"}
+
+
 @app.post("/api/payments/create")
 def create_payment():
-    return {"payment_url": "https://example.com/payments/demo", "status": "created"}
+    raise HTTPException(status_code=410, detail="Use /api/payments/amwal/init for online payments.")
 
 
 @app.post("/api/admin/login", response_model=schemas.TokenOut)

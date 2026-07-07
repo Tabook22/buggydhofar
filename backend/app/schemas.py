@@ -252,6 +252,54 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class AmwalInitRequest(BaseModel):
+    booking_id: int
+    language_id: str = "en"
+
+
+class AmwalSmartBoxConfigOut(BaseModel):
+    booking_id: int
+    booking_number: str
+    script_url: str
+    mid: str
+    tid: str
+    currency_id: int
+    amount_trxn: str
+    merchant_reference: str
+    language_id: str
+    payment_view_type: int
+    trx_date_time: str
+    session_token: str = ""
+    contact_info_type: int
+    return_url: str
+    cancel_url: str
+    ignore_receipt: str
+    secure_hash: str
+    primary_color: str
+
+
+class AmwalCompleteRequest(BaseModel):
+    booking_id: int
+    amount: str | float | None = None
+    currencyId: str | int | None = None
+    customerId: str | None = None
+    customerTokenId: str | None = None
+    merchantId: str | int | None = None
+    merchantReference: str | None = None
+    responseCode: str | None = None
+    terminalId: str | int | None = None
+    transactionId: str | None = None
+    transactionTime: str | None = None
+    secureHashValue: str | None = None
+
+
+class AmwalPaymentResultOut(BaseModel):
+    success: bool
+    payment_status: str
+    booking_status: str
+    message: str
+
+
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"

@@ -10,6 +10,7 @@ import { LiabilityWaiver } from "../components/LiabilityWaiver";
 import { PageShell } from "../components/Layout";
 import { defaultTransferSettings } from "../components/AdminTransferSettings";
 import { defaultBookingSelection, clearBookingDraft, isBookingSelectionReady, resolveInitialBookingSelection, saveBookingDraft } from "../lib/bookingDraft";
+import { openAmwalSmartBox } from "../lib/amwalSmartBox";
 
 const defaultSelection = defaultBookingSelection;
 
@@ -38,6 +39,8 @@ export default function BookingPage() {
     notes: ""
   });
   const [waiverAccepted, setWaiverAccepted] = useState(false);
+  const [payingOnline, setPayingOnline] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
 
   useEffect(() => {
     Promise.all([api.getVehicles(), api.getRoutes(), api.getSiteContent().catch(() => null)]).then(
@@ -101,6 +104,56 @@ export default function BookingPage() {
     finishConfirmation();
   }, []);
 
+  async function startOnlinePayment(booking: BookingResult) {
+    setPayingOnline(true);
+    setPaymentError("");
+    try {
+      const config = await api.initAmwalPayment(booking.id, i18n.language.startsWith("ar") ? "ar" : "en");
+      await openAmwalSmartBox(config, {
+        onComplete: async (data) => {
+          try {
+            const payment = await api.completeAmwalPayment(booking.id, data);
+            if (payment.success) {
+              setConfirmedBooking({ ...booking, payment_status: "paid", booking_status: "paid" });
+              setConfirmed(true);
+            } else {
+              setPaymentError(t("booking.paymentFailed"));
+              setConfirmedBooking(booking);
+              setConfirmed(true);
+            }
+          } catch (error) {
+            setPaymentError(error instanceof Error ? error.message : t("booking.paymentFailed"));
+            setConfirmedBooking(booking);
+            setConfirmed(true);
+          } finally {
+            setPayingOnline(false);
+          }
+        },
+        onError: () => {
+          setPaymentError(t("booking.paymentFailed"));
+          setConfirmedBooking(booking);
+          setConfirmed(true);
+          setPayingOnline(false);
+        },
+        onCancel: () => {
+          setConfirmedBooking(booking);
+          setConfirmed(true);
+          setPayingOnline(false);
+        }
+      });
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : t("booking.paymentUnavailable"));
+      setConfirmedBooking(booking);
+      setConfirmed(true);
+      setPayingOnline(false);
+    }
+  }
+
+  const retryOnlinePayment = useCallback(async () => {
+    if (!confirmedBooking || confirmedBooking.payment_method !== "visa" || payingOnline) return;
+    await startOnlinePayment(confirmedBooking);
+  }, [confirmedBooking, payingOnline, i18n.language, t]);
+
   async function submitBooking(event: FormEvent) {
     event.preventDefault();
     setSubmitError("");
@@ -138,9 +191,13 @@ export default function BookingPage() {
     };
     try {
       const result = await api.createBooking(payload);
-      setConfirmedBooking(result);
       setBookingNumber(result.booking_number);
-      setConfirmed(true);
+      if (paymentMethod === "visa") {
+        await startOnlinePayment(result);
+      } else {
+        setConfirmedBooking(result);
+        setConfirmed(true);
+      }
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : t("availability.loadError"));
     }
@@ -178,7 +235,15 @@ export default function BookingPage() {
                 ]
               }
               onRedirect={handleConfirmationRedirect}
+              onPayOnline={confirmedBooking.payment_method === "visa" && confirmedBooking.payment_status !== "paid" ? retryOnlinePayment : undefined}
+              payingOnline={payingOnline}
+              paymentError={paymentError}
             />
+          ) : payingOnline ? (
+            <div className="glass mx-auto max-w-2xl rounded-[2rem] p-10 text-center">
+              <p className="text-lg font-bold text-forest-300">{t("booking.paymentProcessing")}</p>
+              <p className="mt-3 text-sm text-white/60">{t("booking.paymentProcessingHint")}</p>
+            </div>
           ) : confirmed ? (
             <div className="glass mx-auto max-w-2xl rounded-[2rem] p-10 text-center">
               <CheckCircle2 className="mx-auto text-forest-400" size={72} />
@@ -270,10 +335,10 @@ export default function BookingPage() {
                   </div>
                   {submitError && <p className="mt-4 rounded-2xl bg-red-500/15 px-4 py-3 text-sm text-red-200">{submitError}</p>}
                   <button
-                    disabled={!canSubmit}
+                    disabled={!canSubmit || payingOnline}
                     className="mt-8 w-full rounded-2xl bg-forest-500 px-6 py-4 font-bold text-white shadow-glow transition hover:bg-forest-400 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {t("booking.submit")}
+                    {payingOnline ? t("booking.paymentProcessing") : paymentMethod === "visa" ? t("booking.submitAndPay") : t("booking.submit")}
                   </button>
                 </form>
               </div>

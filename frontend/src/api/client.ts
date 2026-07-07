@@ -87,6 +87,34 @@ export type BookingPayload = {
   notes?: string;
 };
 
+export type AmwalSmartBoxConfig = {
+  booking_id: number;
+  booking_number: string;
+  script_url: string;
+  mid: string;
+  tid: string;
+  currency_id: number;
+  amount_trxn: string;
+  merchant_reference: string;
+  language_id: string;
+  payment_view_type: number;
+  trx_date_time: string;
+  session_token: string;
+  contact_info_type: number;
+  return_url: string;
+  cancel_url: string;
+  ignore_receipt: string;
+  secure_hash: string;
+  primary_color: string;
+};
+
+export type AmwalPaymentResult = {
+  success: boolean;
+  payment_status: string;
+  booking_status: string;
+  message: string;
+};
+
 export type BookingResult = {
   id: number;
   booking_number: string;
@@ -359,6 +387,16 @@ export const api = {
     request<BookingResult>("/api/bookings", {
       method: "POST",
       body: JSON.stringify(payload)
+    }),
+  initAmwalPayment: (bookingId: number, languageId: string) =>
+    request<AmwalSmartBoxConfig>("/api/payments/amwal/init", {
+      method: "POST",
+      body: JSON.stringify({ booking_id: bookingId, language_id: languageId })
+    }),
+  completeAmwalPayment: (bookingId: number, callbackData: Record<string, unknown>) =>
+    request<AmwalPaymentResult>("/api/payments/amwal/complete", {
+      method: "POST",
+      body: JSON.stringify({ booking_id: bookingId, ...callbackData })
     }),
   getCheckInBooking: (token: string) => request<BookingCheckIn>(`/api/check-in/${encodeURIComponent(token)}`),
   staffCheckIn: (token: string, staffToken: string) =>
