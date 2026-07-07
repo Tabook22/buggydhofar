@@ -477,7 +477,7 @@ def create_booking(payload: schemas.BookingCreate, background_tasks: BackgroundT
     if booking_mode == pricing.BOOKING_MODE_GROUP and not group_type:
         raise HTTPException(
             status_code=400,
-            detail="Please select a group type: Family, Ladies, Men, or Mix.",
+            detail="Please select a group type: Family, Ladies, Men, or General.",
         )
     if booking_mode == pricing.BOOKING_MODE_INDIVIDUAL:
         group_type = None

@@ -33,7 +33,7 @@ def normalize_group_type(value: str | None) -> str | None:
     if not normalized:
         return None
     if normalized not in GROUP_TYPES:
-        raise ValueError("Invalid group type. Choose Family, Ladies, Men, or Mix.")
+        raise ValueError("Invalid group type. Choose Family, Ladies, Men, or General.")
     return normalized
 
 
@@ -42,13 +42,13 @@ def group_type_label(value: str | None, *, language: str = "en") -> str:
         GROUP_TYPE_FAMILY: "Family",
         GROUP_TYPE_LADIES: "Ladies",
         GROUP_TYPE_MEN: "Men",
-        GROUP_TYPE_MIX: "Mix",
+        GROUP_TYPE_MIX: "General",
     }
     labels_ar = {
         GROUP_TYPE_FAMILY: "عائلة",
         GROUP_TYPE_LADIES: "سيدات",
         GROUP_TYPE_MEN: "رجال",
-        GROUP_TYPE_MIX: "مختلط",
+        GROUP_TYPE_MIX: "عامة",
     }
     if not value:
         return ""

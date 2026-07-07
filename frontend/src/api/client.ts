@@ -290,7 +290,7 @@ export function groupTypeLabel(type: GroupType | "" | null | undefined, language
     family: { en: "Family", ar: "عائلة" },
     ladies: { en: "Ladies", ar: "سيدات" },
     men: { en: "Men", ar: "رجال" },
-    mix: { en: "Mix", ar: "مختلط" }
+    mix: { en: "General", ar: "عامة" }
   };
   return ar ? labels[type].ar : labels[type].en;
 }
