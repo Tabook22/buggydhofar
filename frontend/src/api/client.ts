@@ -117,7 +117,7 @@ export type AmwalPaymentResult = {
 };
 
 export type BookingLookupPayload = {
-  booking_number: string;
+  booking_number?: string;
   email?: string;
   phone?: string;
 };

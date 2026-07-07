@@ -57,20 +57,15 @@ export default function BookingLookupPage() {
     const trimmedEmail = email.trim();
     const trimmedPhone = phone.trim();
 
-    if (!trimmedNumber) {
-      setError(t("lookup.numberRequired"));
-      setLoading(false);
-      return;
-    }
-    if (!trimmedEmail && !trimmedPhone) {
-      setError(t("lookup.contactRequired"));
+    if (!trimmedNumber && !trimmedEmail && !trimmedPhone) {
+      setError(t("lookup.fieldRequired"));
       setLoading(false);
       return;
     }
 
     try {
       const data = await api.lookupBooking({
-        booking_number: trimmedNumber,
+        booking_number: trimmedNumber || undefined,
         email: trimmedEmail || undefined,
         phone: trimmedPhone || undefined
       });
@@ -109,7 +104,6 @@ export default function BookingLookupPage() {
                   <label className="space-y-2">
                     <span className="text-sm font-semibold text-white/75">{t("lookup.bookingNumber")}</span>
                     <input
-                      required
                       className={inputClass}
                       inputMode="numeric"
                       maxLength={6}
@@ -118,6 +112,7 @@ export default function BookingLookupPage() {
                       onChange={(event) => setBookingNumber(event.target.value.replace(/\D/g, ""))}
                     />
                   </label>
+                  <p className="text-center text-xs text-white/45">{t("lookup.orDivider")}</p>
                   <label className="space-y-2">
                     <span className="text-sm font-semibold text-white/75">{t("booking.email")}</span>
                     <input
@@ -128,7 +123,7 @@ export default function BookingLookupPage() {
                       onChange={(event) => setEmail(event.target.value)}
                     />
                   </label>
-                  <p className="text-center text-xs text-white/45">{t("lookup.orPhone")}</p>
+                  <p className="text-center text-xs text-white/45">{t("lookup.orDivider")}</p>
                   <label className="space-y-2">
                     <span className="text-sm font-semibold text-white/75">{t("booking.phone")}</span>
                     <input

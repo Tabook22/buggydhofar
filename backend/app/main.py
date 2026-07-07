@@ -580,14 +580,54 @@ def _normalize_lookup_phone(value: str) -> str:
     return "".join(ch for ch in value if ch.isdigit())
 
 
-def _booking_lookup_verified(booking: models.Booking, email: str | None, phone: str | None) -> bool:
+def _find_booking_for_lookup(
+    db: Session,
+    booking_number: str | None,
+    email: str | None,
+    phone: str | None,
+) -> models.Booking | None:
+    number_value = (booking_number or "").strip()
     email_value = (email or "").strip().lower()
     phone_value = _normalize_lookup_phone(phone or "")
-    if email_value and booking.email.strip().lower() == email_value:
-        return True
-    if phone_value and _normalize_lookup_phone(booking.phone) == phone_value:
-        return True
-    return False
+
+    if not number_value and not email_value and not phone_value:
+        return None
+
+    if number_value:
+        booking = db.query(models.Booking).filter(models.Booking.booking_number == number_value).first()
+        if not booking:
+            return None
+        if email_value and booking.email.strip().lower() != email_value:
+            return None
+        if phone_value and _normalize_lookup_phone(booking.phone) != phone_value:
+            return None
+        return booking
+
+    if email_value and phone_value:
+        bookings = (
+            db.query(models.Booking)
+            .filter(func.lower(models.Booking.email) == email_value)
+            .order_by(models.Booking.created_at.desc())
+            .all()
+        )
+        for booking in bookings:
+            if _normalize_lookup_phone(booking.phone) == phone_value:
+                return booking
+        return None
+
+    if email_value:
+        return (
+            db.query(models.Booking)
+            .filter(func.lower(models.Booking.email) == email_value)
+            .order_by(models.Booking.created_at.desc())
+            .first()
+        )
+
+    recent = db.query(models.Booking).order_by(models.Booking.created_at.desc()).limit(2000).all()
+    for booking in recent:
+        if _normalize_lookup_phone(booking.phone) == phone_value:
+            return booking
+    return None
 
 
 def booking_to_lookup_out(booking: models.Booking, db: Session) -> schemas.BookingLookupOut:
@@ -621,18 +661,24 @@ def booking_to_lookup_out(booking: models.Booking, db: Session) -> schemas.Booki
 
 @app.post("/api/bookings/lookup", response_model=schemas.BookingLookupOut)
 def lookup_booking(payload: schemas.BookingLookupCreate, db: Session = Depends(get_db)):
-    if not payload.email and not payload.phone:
-        raise HTTPException(
-            status_code=400,
-            detail="Please enter the email or phone number you used when booking.",
-        )
-
-    booking_number = payload.booking_number.strip()
-    booking = db.query(models.Booking).filter(models.Booking.booking_number == booking_number).first()
-    if not booking or not _booking_lookup_verified(booking, str(payload.email) if payload.email else None, payload.phone):
+    booking = _find_booking_for_lookup(
+        db,
+        payload.booking_number,
+        str(payload.email) if payload.email else None,
+        payload.phone,
+    )
+    if not booking:
+        number_value = (payload.booking_number or "").strip()
+        email_value = str(payload.email).strip() if payload.email else ""
+        phone_value = (payload.phone or "").strip()
+        if not number_value and not email_value and not phone_value:
+            raise HTTPException(
+                status_code=400,
+                detail="Please enter your booking number, email, or phone number.",
+            )
         raise HTTPException(
             status_code=404,
-            detail="No booking found with those details. Please check your booking number and contact information.",
+            detail="No booking found with those details.",
         )
 
     return booking_to_lookup_out(booking, db)

@@ -378,7 +378,7 @@ class SiteContentOut(SiteContentBase):
 
 
 class BookingLookupCreate(BaseModel):
-    booking_number: str = Field(min_length=4, max_length=6)
+    booking_number: str | None = None
     email: EmailStr | None = None
     phone: str | None = None
 
