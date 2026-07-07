@@ -5,6 +5,7 @@ import smtplib
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formatdate, make_msgid
 from pathlib import Path
 
 from . import models
@@ -371,11 +372,17 @@ def _deliver_email(
     use_ssl = os.getenv("SMTP_USE_SSL", "").lower() in {"1", "true", "yes"} or smtp_port == 465
     use_tls = os.getenv("SMTP_USE_TLS", "false").lower() in {"1", "true", "yes"}
 
+    from_domain = FROM_EMAIL.split("@")[-1] if "@" in FROM_EMAIL else "buggydhofar.com"
+    envelope_from = smtp_user or FROM_EMAIL
+
     message = MIMEMultipart("alternative")
     message["Subject"] = subject
     message["From"] = f"{FROM_NAME} <{FROM_EMAIL}>"
     message["To"] = recipient
     message["Reply-To"] = reply_to or FROM_EMAIL
+    message["Date"] = formatdate(localtime=True)
+    message["Message-ID"] = make_msgid(domain=from_domain)
+    message["MIME-Version"] = "1.0"
     message.attach(MIMEText(plain, "plain", "utf-8"))
     message.attach(MIMEText(html, "html", "utf-8"))
 
@@ -390,7 +397,7 @@ def _deliver_email(
                 server.starttls()
             if smtp_user and smtp_password:
                 server.login(smtp_user, smtp_password)
-            server.sendmail(FROM_EMAIL, [recipient], message.as_string())
+            server.sendmail(envelope_from, [recipient], message.as_string())
         return "sent", None
     except Exception as exc:
         logger.exception("SMTP delivery failed to %s", recipient)
