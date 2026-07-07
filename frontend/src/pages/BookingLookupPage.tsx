@@ -161,21 +161,6 @@ export default function BookingLookupPage() {
                 autoRedirect={false}
                 lookupMode
               />
-              <div className="mt-6 flex flex-wrap justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={searchAgain}
-                  className="rounded-2xl border border-white/15 px-6 py-3 font-bold text-white transition hover:bg-white/10"
-                >
-                  {t("lookup.searchAgain")}
-                </button>
-                <Link
-                  to="/booking"
-                  className="rounded-2xl bg-forest-500 px-6 py-3 font-bold text-white transition hover:bg-forest-400"
-                >
-                  {t("nav.book")}
-                </Link>
-              </div>
             </>
           )}
         </div>
