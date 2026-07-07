@@ -370,6 +370,12 @@ def submit_contact(payload: schemas.ContactCreate):
     )
     if status == "failed":
         raise HTTPException(status_code=502, detail=error or "Unable to send your message. Please try again later.")
+    if status == "saved_dev" and email_service.is_production_mode():
+        logger.error("Contact form cannot send email: SMTP_HOST is not configured in production.")
+        raise HTTPException(
+            status_code=503,
+            detail="Email is not configured on the server yet. Please email info@buggydhofar.com directly.",
+        )
 
     return {
         "status": status,

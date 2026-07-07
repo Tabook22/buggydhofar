@@ -17,6 +17,17 @@ logger = logging.getLogger(__name__)
 
 FROM_EMAIL = os.getenv("SMTP_FROM", "info@buggydhofar.com")
 FROM_NAME = os.getenv("SMTP_FROM_NAME", "Buggy Dhofar")
+
+
+def smtp_configured() -> bool:
+    return bool(os.getenv("SMTP_HOST", "").strip())
+
+
+def is_production_mode() -> bool:
+    site = os.getenv("PUBLIC_SITE_URL", "").strip().lower()
+    if site and "localhost" not in site and "127.0.0.1" not in site:
+        return True
+    return os.getenv("KHAREEF_ENV", "").strip().lower() == "production"
 CONFIRMATION_SUBJECT = "Booking request received"
 CONFIRMED_SUBJECT = "Your booking is confirmed"
 CANCELLED_SUBJECT = "Booking cancelled"
