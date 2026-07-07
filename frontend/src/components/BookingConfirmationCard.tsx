@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CheckCircle2 } from "lucide-react";
-import { BookingResult } from "../api/client";
+import { BookingResult, groupTypeDetailRow } from "../api/client";
 import { BookingQrCode } from "./BookingQrCode";
 
 const REDIRECT_SECONDS = 120;
@@ -33,7 +33,7 @@ export function BookingConfirmationCard({
   paymentJustCompleted = false,
   autoRedirect = true
 }: BookingConfirmationCardProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const isPaid = booking.payment_status === "paid";
   const [secondsLeft, setSecondsLeft] = useState(REDIRECT_SECONDS);
 
@@ -67,6 +67,23 @@ export function BookingConfirmationCard({
       ? t("booking.statusCancelled")
       : t("booking.statusPending");
 
+  const groupTypeRow = groupTypeDetailRow(booking, t, i18n.language);
+  const detailRows: [string, string][] = [
+    [t("booking.fullName"), booking.customer_name],
+    [t("booking.phone"), booking.phone],
+    [t("booking.email"), booking.email],
+    [t("booking.date"), booking.date],
+    [t("booking.time"), booking.time],
+    [t("booking.route"), routeName || "—"],
+    [t("booking.passengers"), String(booking.passengers)],
+    ...(groupTypeRow ? [groupTypeRow] : []),
+    [t("booking.buggyBike"), bikesLabel],
+    [t("booking.total"), `${booking.total_price} ${t("booking.omr")}`],
+    [t("booking.payment"), paymentLabel(booking.payment_method, t)],
+    [t("booking.paymentStatus"), paymentStatusLabel],
+    [t("booking.bookingStatus"), bookingStatusLabel]
+  ];
+
   const title = paymentJustCompleted || isPaid ? t("booking.paymentConfirmedTitle") : t("booking.confirmed");
   const subtitle = paymentJustCompleted || isPaid ? t("booking.paymentConfirmedSubtitle") : t("booking.confirmedEmail");
 
@@ -90,20 +107,7 @@ export function BookingConfirmationCard({
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
           <h3 className="text-lg font-black">{t("booking.confirmationDetails")}</h3>
           <dl className="mt-4 space-y-3 text-sm">
-            {[
-              [t("booking.fullName"), booking.customer_name],
-              [t("booking.phone"), booking.phone],
-              [t("booking.email"), booking.email],
-              [t("booking.date"), booking.date],
-              [t("booking.time"), booking.time],
-              [t("booking.route"), routeName || "—"],
-              [t("booking.passengers"), String(booking.passengers)],
-              [t("booking.buggyBike"), bikesLabel],
-              [t("booking.total"), `${booking.total_price} ${t("booking.omr")}`],
-              [t("booking.payment"), paymentLabel(booking.payment_method, t)],
-              [t("booking.paymentStatus"), paymentStatusLabel],
-              [t("booking.bookingStatus"), bookingStatusLabel]
-            ].map(([label, value]) => (
+            {detailRows.map(([label, value]) => (
               <div key={label} className="flex justify-between gap-4 border-b border-white/5 pb-2">
                 <dt className="text-white/55">{label}</dt>
                 <dd className={`text-end font-semibold ${label === t("booking.paymentStatus") && isPaid ? "text-forest-300" : "text-white/90"}`}>

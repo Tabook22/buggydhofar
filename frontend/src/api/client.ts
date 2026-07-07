@@ -157,6 +157,8 @@ export type BookingCheckIn = {
   fleet_unit_numbers: number[];
   route_name_en: string | null;
   route_name_ar: string | null;
+  booking_mode?: string | null;
+  group_type?: string | null;
   booking_status: string;
   payment_status: string;
   total_price: number;
@@ -262,6 +264,16 @@ export function groupTypeLabel(type: GroupType | "" | null | undefined, language
     mix: { en: "Mix", ar: "مختلط" }
   };
   return ar ? labels[type].ar : labels[type].en;
+}
+
+export function groupTypeDetailRow(
+  booking: { booking_mode?: string | null; group_type?: string | null },
+  t: (key: string) => string,
+  language: string
+): [string, string] | null {
+  const type = normalizeGroupType(booking.group_type);
+  if (booking.booking_mode === "individual" || !type) return null;
+  return [t("booking.groupType"), groupTypeLabel(type, language)];
 }
 
 export const BUGGY_PRICE_1_PASSENGER = 25;

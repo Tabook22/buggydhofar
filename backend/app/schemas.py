@@ -209,6 +209,8 @@ class BookingCheckInOut(BaseModel):
     fleet_unit_numbers: list[int] = []
     route_name_en: str | None = None
     route_name_ar: str | None = None
+    booking_mode: str = "group"
+    group_type: str | None = None
     booking_status: str
     payment_status: str
     total_price: float

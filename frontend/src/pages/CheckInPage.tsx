@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { CheckCircle2, Ticket } from "lucide-react";
-import { api, BookingCheckIn } from "../api/client";
+import { api, BookingCheckIn, groupTypeDetailRow } from "../api/client";
 import { BookingQrCode } from "../components/BookingQrCode";
 import { PageShell } from "../components/Layout";
 
@@ -47,6 +47,8 @@ export default function CheckInPage() {
       ? booking.fleet_unit_numbers.map((n) => `#${n}`).join(", ")
       : "—";
 
+  const groupTypeRow = booking ? groupTypeDetailRow(booking, t, i18n.language) : null;
+
   return (
     <PageShell>
       <main className="hero-bg px-4 pb-20 pt-32 sm:px-6 lg:px-8">
@@ -88,6 +90,7 @@ export default function CheckInPage() {
                   [t("booking.time"), booking.time],
                   [t("booking.route"), routeName || "—"],
                   [t("booking.passengers"), String(booking.passengers)],
+                  ...(groupTypeRow ? [groupTypeRow] : []),
                   [t("booking.buggyBike"), bikesLabel],
                   [t("booking.total"), `${booking.total_price} ${t("booking.omr")}`],
                   [t("booking.bookingStatus"), customerStatusLabel(booking.booking_status, t)]

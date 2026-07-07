@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { CheckCircle2, ShieldCheck } from "lucide-react";
-import { api, BookingCheckIn, STAFF_TOKEN_KEY, clearStaffToken } from "../api/client";
+import { api, BookingCheckIn, STAFF_TOKEN_KEY, clearStaffToken, groupTypeDetailRow } from "../api/client";
 
 export default function StaffVerifyBookingPage() {
   const { token = "" } = useParams();
@@ -64,6 +64,8 @@ export default function StaffVerifyBookingPage() {
       ? booking.fleet_unit_numbers.map((n) => `#${n}`).join(", ")
       : "—";
 
+  const groupTypeRow = booking ? groupTypeDetailRow(booking, t, i18n.language) : null;
+
   return (
     <main className="min-h-screen bg-forest-950 p-4 text-white lg:p-8">
       <div className="mx-auto max-w-2xl">
@@ -110,6 +112,7 @@ export default function StaffVerifyBookingPage() {
                 [t("booking.time"), booking.time],
                 [t("booking.route"), routeName || "—"],
                 [t("booking.passengers"), String(booking.passengers)],
+                ...(groupTypeRow ? [groupTypeRow] : []),
                 [t("booking.buggyBike"), bikesLabel],
                 [t("booking.total"), `${booking.total_price} ${t("booking.omr")}`],
                 [t("admin.status"), booking.booking_status]

@@ -224,6 +224,8 @@ def booking_check_in_out(booking: models.Booking, db: Session) -> schemas.Bookin
         fleet_unit_numbers=[unit.unit_number for unit in units],
         route_name_en=route.name_en if route else None,
         route_name_ar=route.name_ar if route else None,
+        booking_mode=getattr(booking, "booking_mode", None) or "group",
+        group_type=getattr(booking, "group_type", None),
         booking_status=booking_lifecycle.normalize_status(booking.booking_status),
         payment_status=booking.payment_status,
         total_price=booking.total_price,
