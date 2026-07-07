@@ -2,13 +2,11 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { CheckCircle2 } from "lucide-react";
-import { api, BookingPayload, BookingResult, PaymentTransferInfo, RouteExperience, Vehicle } from "../api/client";
-import { BankTransferModal } from "../components/BankTransferModal";
+import { api, BookingPayload, BookingResult, RouteExperience, Vehicle } from "../api/client";
 import { BookingConfirmationCard } from "../components/BookingConfirmationCard";
 import { BookingSelection, BookingSummaryCard, BookingWidget, calculateTotal } from "../components/Booking";
 import { LiabilityWaiver } from "../components/LiabilityWaiver";
 import { PageShell } from "../components/Layout";
-import { defaultTransferSettings } from "../components/AdminTransferSettings";
 import { defaultBookingSelection, clearBookingDraft, isBookingSelectionReady, resolveInitialBookingSelection, saveBookingDraft } from "../lib/bookingDraft";
 import { openAmwalSmartBox } from "../lib/amwalSmartBox";
 
@@ -16,7 +14,7 @@ const defaultSelection = defaultBookingSelection;
 
 const inputClass = "w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white outline-none transition placeholder:text-white/40 focus:border-forest-400";
 
-const emptyTransferInfo: PaymentTransferInfo = { ...defaultTransferSettings };
+const ONLINE_PAYMENT_METHOD = "visa";
 
 export default function BookingPage() {
   const { t, i18n } = useTranslation();
@@ -29,9 +27,6 @@ export default function BookingPage() {
   const [confirmedBooking, setConfirmedBooking] = useState<BookingResult | null>(null);
   const [bookingNumber, setBookingNumber] = useState("");
   const [submitError, setSubmitError] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("visa");
-  const [transferInfo, setTransferInfo] = useState<PaymentTransferInfo>(emptyTransferInfo);
-  const [showTransferModal, setShowTransferModal] = useState(false);
   const [form, setForm] = useState({
     customer_name: "",
     phone: "",
@@ -43,39 +38,11 @@ export default function BookingPage() {
   const [payingOnline, setPayingOnline] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [pendingVisaBooking, setPendingVisaBooking] = useState<BookingResult | null>(null);
-  const [pendingBankPayload, setPendingBankPayload] = useState<BookingPayload | null>(null);
-  const [confirmingTransfer, setConfirmingTransfer] = useState(false);
 
   useEffect(() => {
-    Promise.all([api.getVehicles(), api.getRoutes(), api.getSiteContent().catch(() => null)]).then(
-      ([vehicleData, routeData, content]) => {
+    Promise.all([api.getVehicles(), api.getRoutes()]).then(([vehicleData, routeData]) => {
       setVehicles(vehicleData);
       setRoutes(routeData);
-      if (content) {
-        setTransferInfo({
-          transfer_title_en: content.transfer_title_en,
-          transfer_title_ar: content.transfer_title_ar,
-          transfer_bank_name_en: content.transfer_bank_name_en,
-          transfer_bank_name_ar: content.transfer_bank_name_ar,
-          transfer_account_name_en: content.transfer_account_name_en,
-          transfer_account_name_ar: content.transfer_account_name_ar,
-          transfer_account_number: content.transfer_account_number,
-          transfer_iban: content.transfer_iban,
-          transfer_mobile_wallet_en: content.transfer_mobile_wallet_en,
-          transfer_mobile_wallet_ar: content.transfer_mobile_wallet_ar,
-          transfer_mobile_number: content.transfer_mobile_number,
-          transfer_notes_en: content.transfer_notes_en,
-          transfer_notes_ar: content.transfer_notes_ar,
-          transfer_show_title: content.transfer_show_title ?? true,
-          transfer_show_bank_name: content.transfer_show_bank_name ?? true,
-          transfer_show_account_name: content.transfer_show_account_name ?? true,
-          transfer_show_account_number: content.transfer_show_account_number ?? true,
-          transfer_show_iban: content.transfer_show_iban ?? true,
-              transfer_show_mobile_wallet: false,
-              transfer_show_mobile_number: content.transfer_show_mobile_number ?? true,
-          transfer_show_notes: content.transfer_show_notes ?? true
-        });
-      }
       const buggy = vehicleData.find((vehicle) => vehicle.type === "buggy" && vehicle.seats === 2) || vehicleData.find((vehicle) => vehicle.type === "buggy");
       setSelection((current) => ({
         ...current,
@@ -92,14 +59,7 @@ export default function BookingPage() {
   useEffect(() => {
     setWaiverAccepted(false);
     setPendingVisaBooking(null);
-    setPendingBankPayload(null);
   }, [form.customer_name, form.national_id, form.phone, form.email]);
-
-  useEffect(() => {
-    if (!waiverAccepted) {
-      setShowTransferModal(false);
-    }
-  }, [waiverAccepted]);
 
   function finishConfirmation() {
     clearBookingDraft();
@@ -109,7 +69,6 @@ export default function BookingPage() {
   function goToConfirmation(booking: BookingResult, paymentSuccess = false) {
     clearBookingDraft();
     setPendingVisaBooking(null);
-    setPendingBankPayload(null);
     if (booking.check_in_token) {
       const suffix = paymentSuccess ? "?payment=success" : "";
       navigate(`/booking/confirmation/${booking.check_in_token}${suffix}`, { replace: true });
@@ -182,26 +141,10 @@ export default function BookingPage() {
       booking_mode: selection.bookingMode,
       group_type: selection.bookingMode === "group" ? selection.groupType || null : null,
       total_price: calculateTotal(selection),
-      payment_method: paymentMethod,
+      payment_method: ONLINE_PAYMENT_METHOD,
       waiver_accepted: true,
       waiver_language: i18n.language.startsWith("ar") ? "ar" : "en"
     };
-  }
-
-  async function confirmBankTransferBooking() {
-    if (!pendingBankPayload) return;
-    setConfirmingTransfer(true);
-    setSubmitError("");
-    try {
-      const result = await api.createBooking(pendingBankPayload);
-      setBookingNumber(result.booking_number);
-      setShowTransferModal(false);
-      goToConfirmation(result);
-    } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : t("availability.loadError"));
-    } finally {
-      setConfirmingTransfer(false);
-    }
   }
 
   async function submitBooking(event: FormEvent) {
@@ -216,20 +159,11 @@ export default function BookingPage() {
       setSubmitError(t("booking.waiverRequired"));
       return;
     }
-    if (!paymentMethod) {
-      setSubmitError(t("booking.paymentLocked"));
-      return;
-    }
-    if (paymentMethod === "visa" && pendingVisaBooking) {
+    if (pendingVisaBooking) {
       await startOnlinePayment(pendingVisaBooking);
       return;
     }
     const payload = buildBookingPayload();
-    if (paymentMethod === "bank_transfer") {
-      setPendingBankPayload(payload);
-      setShowTransferModal(true);
-      return;
-    }
     try {
       const result = await api.createBooking(payload);
       setBookingNumber(result.booking_number);
@@ -239,20 +173,10 @@ export default function BookingPage() {
     }
   }
 
-  const canChoosePayment = waiverAccepted;
-
   const canSubmit =
     isBookingSelectionReady(selection) &&
     Boolean(form.customer_name.trim() && form.phone.trim() && form.email.trim() && form.national_id.trim()) &&
     waiverAccepted;
-
-  function selectPaymentMethod(method: string) {
-    if (!canChoosePayment) return;
-    setPaymentMethod(method);
-    if (method === "bank_transfer") {
-      setShowTransferModal(true);
-    }
-  }
 
   return (
     <PageShell>
@@ -333,45 +257,8 @@ export default function BookingPage() {
                     accepted={waiverAccepted}
                     onAcceptedChange={setWaiverAccepted}
                   />
-                  <div className={`mt-8 transition ${canChoosePayment ? "" : "opacity-50"}`}>
-                    <h3 className="text-xl font-black">{t("booking.payment")}</h3>
-                    {!canChoosePayment && (
-                      <p className="mt-2 text-sm text-amber-200/80">{t("booking.paymentLocked")}</p>
-                    )}
-                    <fieldset disabled={!canChoosePayment} className="mt-4 border-0 p-0 disabled:cursor-not-allowed">
-                      <div className="grid gap-4 md:grid-cols-2">
-                        {[
-                          ["visa", t("booking.payVisa")],
-                          ["bank_transfer", t("booking.payTransfer")]
-                        ].map(([value, label]) => (
-                          <label
-                            key={value}
-                            className={`flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 ${canChoosePayment ? "cursor-pointer" : "cursor-not-allowed"}`}
-                          >
-                            <input
-                              type="radio"
-                              checked={paymentMethod === value}
-                              disabled={!canChoosePayment}
-                              onChange={() => selectPaymentMethod(value)}
-                            />
-                            <span className="font-semibold">{label}</span>
-                          </label>
-                        ))}
-                      </div>
-                      {paymentMethod === "bank_transfer" && (
-                        <button
-                          type="button"
-                          disabled={!canChoosePayment}
-                          onClick={() => canChoosePayment && setShowTransferModal(true)}
-                          className="mt-3 text-sm font-bold text-forest-300 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60"
-                        >
-                          {t("booking.viewTransferDetails")}
-                        </button>
-                      )}
-                    </fieldset>
-                  </div>
                   {submitError && <p className="mt-4 rounded-2xl bg-red-500/15 px-4 py-3 text-sm text-red-200">{submitError}</p>}
-                  {paymentError && paymentMethod === "visa" && (
+                  {paymentError && (
                     <div className="mt-4 rounded-2xl bg-red-500/15 px-4 py-3 text-sm text-red-200">
                       <p>{paymentError}</p>
                       {pendingVisaBooking && (
@@ -382,16 +269,14 @@ export default function BookingPage() {
                     </div>
                   )}
                   <button
-                    disabled={!canSubmit || payingOnline || confirmingTransfer}
+                    disabled={!canSubmit || payingOnline}
                     className="mt-8 w-full rounded-2xl bg-forest-500 px-6 py-4 font-bold text-white shadow-glow transition hover:bg-forest-400 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {payingOnline
                       ? t("booking.paymentProcessing")
-                      : paymentMethod === "visa" && pendingVisaBooking
+                      : pendingVisaBooking
                         ? t("booking.retryPayment")
-                        : paymentMethod === "visa"
-                          ? t("booking.submitAndPay")
-                          : t("booking.continueToTransfer")}
+                        : t("booking.submitAndPay")}
                   </button>
                 </form>
               </div>
@@ -400,18 +285,6 @@ export default function BookingPage() {
           )}
         </div>
       </main>
-      <BankTransferModal
-        info={transferInfo}
-        open={showTransferModal}
-        onClose={() => {
-          if (!confirmingTransfer) {
-            setShowTransferModal(false);
-          }
-        }}
-        onConfirm={pendingBankPayload ? confirmBankTransferBooking : undefined}
-        confirming={confirmingTransfer}
-        totalAmount={pendingBankPayload ? String(pendingBankPayload.total_price) : undefined}
-      />
     </PageShell>
   );
 }
