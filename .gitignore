@@ -60,6 +60,9 @@ ehthumbs.db
 !.vscode/extensions.json
 !.vscode/settings.json.example
 
+# Local terminal session logs
+terminals/
+
 # --- Misc ---
 *.bak
 *.tmp

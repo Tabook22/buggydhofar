@@ -1,9 +1,0 @@
----
-pid: 54296
-cwd: "C:\Users\nmtab\OneDrive\Desktop\myProjects\buggy"
-command: "try { $r = Invoke-WebRequest -Uri \"https://buggydhofar.com/api/contact\" -Method POST -ContentType \"application/json\" -Body '{\"full_name\":\"SMTP Verify\",\"phone\":\"+96890000000\",\"email\":\"verify@example.com\",\"message\":\"Post-SMTP configuration verification test.\"}' -UseBasicParsing -TimeoutSec 30; Write-Output \"status=$($r.StatusCode)\"; Write-Output $r.Content } catch { Write-Output \"error=$($_.Exception.Message)\"; if ($_.Exception.Response) { $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream()); Write-Output $reader.ReadToEnd() } }"
-started_at: 2026-07-07T20:14:18.631Z
-running_for_ms: 1345003  
----
-status=200
-{"status":"sent","message":"Thank you. We have received your message and will reply soon."}
