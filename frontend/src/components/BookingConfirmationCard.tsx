@@ -15,6 +15,7 @@ type BookingConfirmationCardProps = {
   paymentError?: string;
   paymentJustCompleted?: boolean;
   autoRedirect?: boolean;
+  lookupMode?: boolean;
 };
 
 function paymentLabel(method: string, t: (key: string) => string) {
@@ -31,7 +32,8 @@ export function BookingConfirmationCard({
   payingOnline = false,
   paymentError = "",
   paymentJustCompleted = false,
-  autoRedirect = true
+  autoRedirect = true,
+  lookupMode = false
 }: BookingConfirmationCardProps) {
   const { t, i18n } = useTranslation();
   const isPaid = booking.payment_status === "paid";
@@ -84,8 +86,16 @@ export function BookingConfirmationCard({
     [t("booking.bookingStatus"), bookingStatusLabel]
   ];
 
-  const title = paymentJustCompleted || isPaid ? t("booking.paymentConfirmedTitle") : t("booking.confirmed");
-  const subtitle = paymentJustCompleted || isPaid ? t("booking.paymentConfirmedSubtitle") : t("booking.confirmedEmail");
+  const title = lookupMode
+    ? t("lookup.statusTitle")
+    : paymentJustCompleted || isPaid
+      ? t("booking.paymentConfirmedTitle")
+      : t("booking.confirmed");
+  const subtitle = lookupMode
+    ? t("lookup.statusSubtitle")
+    : paymentJustCompleted || isPaid
+      ? t("booking.paymentConfirmedSubtitle")
+      : t("booking.confirmedEmail");
 
   return (
     <div className="glass mx-auto max-w-3xl rounded-[2rem] p-8 md:p-10">
@@ -140,14 +150,21 @@ export function BookingConfirmationCard({
         </div>
       )}
 
-      <p className="mt-8 text-center text-sm text-white/55">{t("booking.saveBookingNumber")}</p>
-      {isPaid ? (
-        <p className="mt-2 text-center text-sm text-white/45">{t("booking.paidStayHint")}</p>
-      ) : autoRedirect ? (
-        <p className="mt-2 text-center text-sm text-white/45">
-          {t("booking.redirectingMinutes", { minutes, seconds })}
-        </p>
-      ) : null}
+      {!lookupMode && (
+        <>
+          <p className="mt-8 text-center text-sm text-white/55">{t("booking.saveBookingNumber")}</p>
+          {isPaid ? (
+            <p className="mt-2 text-center text-sm text-white/45">{t("booking.paidStayHint")}</p>
+          ) : autoRedirect ? (
+            <p className="mt-2 text-center text-sm text-white/45">
+              {t("booking.redirectingMinutes", { minutes, seconds })}
+            </p>
+          ) : null}
+        </>
+      )}
+      {lookupMode && booking.checked_in_at && (
+        <p className="mt-6 text-center text-sm font-semibold text-forest-300">{t("lookup.checkedIn")}</p>
+      )}
     </div>
   );
 }

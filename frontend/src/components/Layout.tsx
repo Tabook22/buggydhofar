@@ -22,6 +22,7 @@ export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const links = [
     ["/", t("nav.home")],
+    ["/booking/lookup", t("nav.lookup")],
     ["/contact", t("nav.contact")]
   ];
 

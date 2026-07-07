@@ -576,6 +576,68 @@ def get_booking_confirmation(token: str, db: Session = Depends(get_db)):
     return booking_to_out(booking, db)
 
 
+def _normalize_lookup_phone(value: str) -> str:
+    return "".join(ch for ch in value if ch.isdigit())
+
+
+def _booking_lookup_verified(booking: models.Booking, email: str | None, phone: str | None) -> bool:
+    email_value = (email or "").strip().lower()
+    phone_value = _normalize_lookup_phone(phone or "")
+    if email_value and booking.email.strip().lower() == email_value:
+        return True
+    if phone_value and _normalize_lookup_phone(booking.phone) == phone_value:
+        return True
+    return False
+
+
+def booking_to_lookup_out(booking: models.Booking, db: Session) -> schemas.BookingLookupOut:
+    route = db.get(models.Route, booking.route_id)
+    units = fleet.booking_fleet_units(db, booking)
+    fleet_unit_numbers = [unit.unit_number for unit in units]
+    token = booking.check_in_token or ""
+    return schemas.BookingLookupOut(
+        booking_number=booking.booking_number or "",
+        customer_name=booking.customer_name,
+        phone=booking.phone,
+        email=booking.email,
+        date=booking.date,
+        time=booking.time,
+        route_name_en=route.name_en if route else None,
+        route_name_ar=route.name_ar if route else None,
+        fleet_unit_numbers=fleet_unit_numbers,
+        bike_count=len(fleet_unit_numbers) or (1 if booking.fleet_unit_id else 0),
+        booking_mode=getattr(booking, "booking_mode", None) or "group",
+        group_type=getattr(booking, "group_type", None),
+        passengers=booking.passengers,
+        total_price=booking.total_price,
+        payment_method=booking.payment_method,
+        payment_status=booking.payment_status,
+        booking_status=booking_lifecycle.normalize_status(booking.booking_status),
+        check_in_url=booking_qr.build_check_in_url(token) if token else None,
+        checked_in_at=booking.checked_in_at,
+        created_at=booking.created_at,
+    )
+
+
+@app.post("/api/bookings/lookup", response_model=schemas.BookingLookupOut)
+def lookup_booking(payload: schemas.BookingLookupCreate, db: Session = Depends(get_db)):
+    if not payload.email and not payload.phone:
+        raise HTTPException(
+            status_code=400,
+            detail="Please enter the email or phone number you used when booking.",
+        )
+
+    booking_number = payload.booking_number.strip()
+    booking = db.query(models.Booking).filter(models.Booking.booking_number == booking_number).first()
+    if not booking or not _booking_lookup_verified(booking, str(payload.email) if payload.email else None, payload.phone):
+        raise HTTPException(
+            status_code=404,
+            detail="No booking found with those details. Please check your booking number and contact information.",
+        )
+
+    return booking_to_lookup_out(booking, db)
+
+
 @app.get("/api/check-in/{token}", response_model=schemas.BookingCheckInOut)
 def get_check_in_booking(token: str, db: Session = Depends(get_db)):
     booking = db.query(models.Booking).filter(models.Booking.check_in_token == token).first()

@@ -116,6 +116,35 @@ export type AmwalPaymentResult = {
   message: string;
 };
 
+export type BookingLookupPayload = {
+  booking_number: string;
+  email?: string;
+  phone?: string;
+};
+
+export type BookingLookupResult = {
+  booking_number: string;
+  customer_name: string;
+  phone: string;
+  email: string;
+  date: string;
+  time: string;
+  route_name_en: string | null;
+  route_name_ar: string | null;
+  fleet_unit_numbers: number[];
+  bike_count: number;
+  booking_mode: string;
+  group_type: string | null;
+  passengers: number;
+  total_price: number;
+  payment_method: string;
+  payment_status: string;
+  booking_status: string;
+  check_in_url: string | null;
+  checked_in_at: string | null;
+  created_at: string;
+};
+
 export type BookingResult = {
   id: number;
   booking_number: string;
@@ -445,6 +474,11 @@ export const api = {
     }),
   getBookingConfirmation: (token: string) =>
     request<BookingResult>(`/api/bookings/confirmation/${encodeURIComponent(token)}`),
+  lookupBooking: (payload: BookingLookupPayload) =>
+    request<BookingLookupResult>("/api/bookings/lookup", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   initAmwalPayment: (bookingId: number, languageId: string) =>
     request<AmwalSmartBoxConfig>("/api/payments/amwal/init", {
       method: "POST",

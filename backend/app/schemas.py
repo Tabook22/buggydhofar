@@ -377,6 +377,35 @@ class SiteContentOut(SiteContentBase):
         from_attributes = True
 
 
+class BookingLookupCreate(BaseModel):
+    booking_number: str = Field(min_length=4, max_length=6)
+    email: EmailStr | None = None
+    phone: str | None = None
+
+
+class BookingLookupOut(BaseModel):
+    booking_number: str
+    customer_name: str
+    phone: str
+    email: EmailStr
+    date: str
+    time: str
+    route_name_en: str | None = None
+    route_name_ar: str | None = None
+    fleet_unit_numbers: list[int] = []
+    bike_count: int = 1
+    booking_mode: str = "group"
+    group_type: str | None = None
+    passengers: int
+    total_price: float
+    payment_method: str
+    payment_status: str
+    booking_status: str
+    check_in_url: str | None = None
+    checked_in_at: datetime | None = None
+    created_at: datetime
+
+
 class ContactCreate(BaseModel):
     full_name: str = Field(min_length=2, max_length=150)
     phone: str = Field(min_length=5, max_length=50)

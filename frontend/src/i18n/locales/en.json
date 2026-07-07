@@ -7,6 +7,7 @@
     "how": "How It Works",
     "faq": "FAQ",
     "contact": "Contact Us",
+    "lookup": "My Booking",
     "book": "Book Now",
     "admin": "Admin"
   },
@@ -263,6 +264,23 @@
       { "q": "Can tourists book online?", "a": "Yes. Guests can book online and pay now or on arrival." },
       { "q": "Is safety equipment included?", "a": "Yes. Helmets and basic safety gear are included with every ride." }
     ]
+  },
+  "lookup": {
+    "title": "Check Your Booking",
+    "subtitle": "Enter your booking number and the email or phone you used when booking.",
+    "bookingNumber": "Booking number",
+    "bookingNumberPlaceholder": "e.g. 4521",
+    "orPhone": "or",
+    "search": "Find my booking",
+    "searching": "Searching…",
+    "searchAgain": "Search again",
+    "notFound": "No booking found with those details.",
+    "numberRequired": "Please enter your booking number.",
+    "contactRequired": "Please enter the email or phone number from your booking.",
+    "statusTitle": "Your booking status",
+    "statusSubtitle": "Here are the latest details for your reservation.",
+    "checkedIn": "You have already checked in for this ride.",
+    "newBooking": "Need a new ride?"
   },
   "contact": {
     "title": "Contact Us",
