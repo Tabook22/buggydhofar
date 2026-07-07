@@ -28,6 +28,28 @@ def is_production_mode() -> bool:
     if site and "localhost" not in site and "127.0.0.1" not in site:
         return True
     return os.getenv("KHAREEF_ENV", "").strip().lower() == "production"
+
+
+AUTO_REPLY_BLOCKED_DOMAINS = frozenset(
+    {
+        "example.com",
+        "example.org",
+        "example.net",
+        "test.com",
+        "invalid",
+        "localhost",
+    }
+)
+
+
+def can_send_contact_auto_reply(email: str) -> bool:
+    parts = email.rsplit("@", 1)
+    if len(parts) != 2 or not parts[0].strip() or not parts[1].strip():
+        return False
+    domain = parts[1].strip().lower()
+    return domain not in AUTO_REPLY_BLOCKED_DOMAINS
+
+
 CONFIRMATION_SUBJECT = "Booking request received"
 CONFIRMED_SUBJECT = "Your booking is confirmed"
 CANCELLED_SUBJECT = "Booking cancelled"
@@ -666,10 +688,13 @@ def send_contact_message(full_name: str, phone: str, email: str, message: str) -
     if status == "failed":
         return status, error
 
-    auto_plain, auto_html = _build_contact_auto_reply_bodies(full_name)
-    auto_status, auto_error = _deliver_email(email, CONTACT_AUTO_REPLY_SUBJECT, auto_plain, auto_html)
-    if auto_status == "failed":
-        logger.warning("Contact auto-reply failed for %s: %s", email, auto_error)
+    if can_send_contact_auto_reply(email):
+        auto_plain, auto_html = _build_contact_auto_reply_bodies(full_name)
+        auto_status, auto_error = _deliver_email(email, CONTACT_AUTO_REPLY_SUBJECT, auto_plain, auto_html)
+        if auto_status == "failed":
+            logger.warning("Contact auto-reply failed for %s: %s", email, auto_error)
+    else:
+        logger.info("Skipping contact auto-reply for blocked or invalid address: %s", email)
 
     if status == "sent":
         logger.info("Contact form message sent to %s from %s", admin_email, email)
