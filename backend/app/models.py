@@ -100,6 +100,7 @@ class Booking(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     national_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     booking_mode: Mapped[str] = mapped_column(String(20), default="group")
+    group_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     waiver_accepted: Mapped[bool] = mapped_column(Boolean, default=False)
     waiver_accepted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     waiver_text: Mapped[str | None] = mapped_column(Text, nullable=True)

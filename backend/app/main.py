@@ -131,6 +131,13 @@ def ensure_booking_mode_column() -> None:
             connection.execute(text("ALTER TABLE bookings ADD COLUMN booking_mode TEXT DEFAULT 'group'"))
 
 
+def ensure_booking_group_type_column() -> None:
+    with engine.begin() as connection:
+        existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(bookings)"))}
+        if "group_type" not in existing_columns:
+            connection.execute(text("ALTER TABLE bookings ADD COLUMN group_type TEXT"))
+
+
 def ensure_booking_tax_columns() -> None:
     with engine.begin() as connection:
         existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(bookings)"))}
@@ -245,6 +252,7 @@ def booking_to_out(booking: models.Booking, db: Session) -> schemas.BookingOut:
         fleet_unit_numbers=fleet_unit_numbers,
         bike_count=len(fleet_unit_ids) or (1 if booking.fleet_unit_id else 0),
         booking_mode=getattr(booking, "booking_mode", None) or "group",
+        group_type=getattr(booking, "group_type", None),
         passengers=booking.passengers,
         subtotal=booking.subtotal,
         tax_amount=booking.tax_amount,
@@ -294,6 +302,7 @@ def startup() -> None:
     ensure_booking_fleet_column()
     ensure_booking_number_column()
     ensure_booking_mode_column()
+    ensure_booking_group_type_column()
     ensure_booking_tax_columns()
     ensure_booking_waiver_columns()
     ensure_booking_check_in_columns()
@@ -459,6 +468,17 @@ def create_booking(payload: schemas.BookingCreate, background_tasks: BackgroundT
         raise HTTPException(status_code=400, detail="Selected vehicle type is unavailable")
 
     booking_mode = pricing.normalize_booking_mode(payload.booking_mode)
+    try:
+        group_type = pricing.normalize_group_type(payload.group_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if booking_mode == pricing.BOOKING_MODE_GROUP and not group_type:
+        raise HTTPException(
+            status_code=400,
+            detail="Please select a group type: Family, Ladies, Men, or Mix.",
+        )
+    if booking_mode == pricing.BOOKING_MODE_INDIVIDUAL:
+        group_type = None
 
     try:
         fleet.validate_group_booking(
@@ -520,6 +540,7 @@ def create_booking(payload: schemas.BookingCreate, background_tasks: BackgroundT
         fleet_unit_id=primary_fleet_unit_id,
         passengers=payload.passengers,
         booking_mode=booking_mode,
+        group_type=group_type,
         subtotal=subtotal,
         tax_amount=tax_amount,
         total_price=expected_price,

@@ -12,7 +12,7 @@ from . import models
 from .booking_numbers import booking_reference
 from .booking_qr import build_check_in_url, qr_code_image_url
 from .fleet import booking_fleet_units, format_bike_label
-from .pricing import TAX_PERCENT, booking_price_breakdown
+from .pricing import TAX_PERCENT, booking_price_breakdown, group_type_label
 
 logger = logging.getLogger(__name__)
 
@@ -173,12 +173,21 @@ def _build_confirmation_bodies(
 
     ref = booking_reference(booking)
     mode_label = "Individual bikes (one per person)" if getattr(booking, "booking_mode", "group") == "individual" else "Group (share bikes)"
+    group_type = getattr(booking, "group_type", None)
+    group_line_plain = f"Group category: {group_type_label(group_type, language='en')}\n" if group_type else ""
+    group_line_html = (
+        f"<tr><td style='padding:8px 0;border-bottom:1px solid #eee'><strong>Group category</strong></td>"
+        f"<td style='padding:8px 0;border-bottom:1px solid #eee'>{group_type_label(group_type, language='en')}</td></tr>"
+        if group_type
+        else ""
+    )
     plain = f"""Dear {booking.customer_name},
 
 Thank you for booking with Buggy Dhofar. We have received your booking request.
 
 Booking number: {ref}
 Booking type: {mode_label}
+{group_line_plain}
 Name: {booking.customer_name}
 Email: {booking.email}
 Mobile: {booking.phone}
@@ -209,6 +218,7 @@ info@buggydhofar.com
   <p style="color:#1f7a4f;font-weight:bold">Your booking number: {ref}</p>
   <table style="width:100%;border-collapse:collapse;margin:20px 0">
     <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Booking number</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{ref}</td></tr>
+    {group_line_html}
     <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Date</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{booking.date}</td></tr>
     <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Time</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{booking.time}</td></tr>
     <tr><td style="padding:8px 0;border-bottom:1px solid #eee"><strong>Buggy bike(s)</strong></td><td style="padding:8px 0;border-bottom:1px solid #eee">{buggy_label}</td></tr>

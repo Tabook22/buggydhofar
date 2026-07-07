@@ -80,6 +80,7 @@ export type BookingPayload = {
   fleet_unit_ids: number[];
   passengers: number;
   booking_mode: BookingMode;
+  group_type?: GroupType | null;
   total_price: number;
   payment_method: string;
   waiver_accepted: boolean;
@@ -130,6 +131,7 @@ export type BookingResult = {
   bike_count: number;
   passengers: number;
   booking_mode: string;
+  group_type?: string | null;
   subtotal: number | null;
   tax_amount: number | null;
   total_price: number;
@@ -238,6 +240,29 @@ export type PaymentTransferInfo = Pick<
 >;
 
 export type BookingMode = "group" | "individual";
+
+export type GroupType = "family" | "ladies" | "men" | "mix";
+
+export const GROUP_TYPE_OPTIONS: GroupType[] = ["family", "ladies", "men", "mix"];
+
+export function normalizeGroupType(value: unknown): GroupType | "" {
+  if (typeof value === "string" && GROUP_TYPE_OPTIONS.includes(value as GroupType)) {
+    return value as GroupType;
+  }
+  return "";
+}
+
+export function groupTypeLabel(type: GroupType | "" | null | undefined, language: string): string {
+  if (!type) return "";
+  const ar = language.startsWith("ar");
+  const labels: Record<GroupType, { en: string; ar: string }> = {
+    family: { en: "Family", ar: "عائلة" },
+    ladies: { en: "Ladies", ar: "سيدات" },
+    men: { en: "Men", ar: "رجال" },
+    mix: { en: "Mix", ar: "مختلط" }
+  };
+  return ar ? labels[type].ar : labels[type].en;
+}
 
 export const BUGGY_PRICE_1_PASSENGER = 25;
 export const BUGGY_PRICE_PER_PASSENGER_2 = 15;

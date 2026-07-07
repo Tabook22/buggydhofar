@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { api, isAdminAuthError } from "../api/client";
+import { api, groupTypeLabel, isAdminAuthError, normalizeGroupType } from "../api/client";
 import { BookingQrCode } from "./BookingQrCode";
 
 export type AdminBooking = {
@@ -18,6 +18,7 @@ export type AdminBooking = {
   fleet_unit_numbers?: number[];
   bike_count?: number;
   booking_mode?: string;
+  group_type?: string | null;
   route_name_en?: string | null;
   passengers: number;
   total_price: number;
@@ -78,7 +79,7 @@ export function AdminBookingsPanel({
   token: string;
   onAuthFailure: (message?: string) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [archive, setArchive] = useState<BookingArchive | null>(null);
   const [bookings, setBookings] = useState<AdminBooking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -363,11 +364,20 @@ export function AdminBookingsPanel({
                         {booking.passengers}
                         {booking.booking_mode === "individual" ? (
                           <span className="block text-xs text-forest-300">{t("booking.modeIndividual")}</span>
-                        ) : booking.bike_count && booking.bike_count > 1 ? (
-                          <span className="block text-xs text-white/45">
-                            {t("booking.bikesNeeded", { count: booking.bike_count })}
-                          </span>
-                        ) : null}
+                        ) : (
+                          <>
+                            {normalizeGroupType(booking.group_type) ? (
+                              <span className="block text-xs text-forest-300">
+                                {groupTypeLabel(normalizeGroupType(booking.group_type), i18n.language)}
+                              </span>
+                            ) : null}
+                            {booking.bike_count && booking.bike_count > 1 ? (
+                              <span className="block text-xs text-white/45">
+                                {t("booking.bikesNeeded", { count: booking.bike_count })}
+                              </span>
+                            ) : null}
+                          </>
+                        )}
                       </td>
                       <td className="p-3">
                         {(booking.fleet_unit_numbers && booking.fleet_unit_numbers.length > 0

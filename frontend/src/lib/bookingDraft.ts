@@ -1,5 +1,5 @@
 import { BookingSelection } from "../components/Booking";
-import { bikesRequiredForPassengers, normalizeBookingMode } from "../api/client";
+import { bikesRequiredForPassengers, normalizeBookingMode, normalizeGroupType } from "../api/client";
 
 const STORAGE_KEY = "khareef_booking_draft";
 
@@ -10,16 +10,19 @@ export const defaultBookingSelection: BookingSelection = {
   routeId: 0,
   fleetUnitIds: [],
   passengers: 1,
-  bookingMode: "group"
+  bookingMode: "group",
+  groupType: ""
 };
 
 export function isBookingSelectionReady(selection: BookingSelection) {
   const bikesNeeded = bikesRequiredForPassengers(selection.passengers, selection.bookingMode);
+  const groupTypeOk = selection.bookingMode !== "group" || Boolean(selection.groupType);
   return Boolean(
     selection.date &&
       selection.time &&
       selection.routeId &&
-      selection.fleetUnitIds.length === bikesNeeded
+      selection.fleetUnitIds.length === bikesNeeded &&
+      groupTypeOk
   );
 }
 
@@ -57,7 +60,8 @@ export function loadBookingDraft(): BookingSelection | null {
       routeId: typeof parsed.routeId === "number" ? parsed.routeId : 0,
       fleetUnitIds,
       passengers,
-      bookingMode: normalizeBookingMode(parsed.bookingMode)
+      bookingMode: normalizeBookingMode(parsed.bookingMode),
+      groupType: normalizeGroupType(parsed.groupType)
     };
   } catch {
     return null;

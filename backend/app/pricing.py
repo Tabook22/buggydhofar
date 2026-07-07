@@ -19,6 +19,43 @@ BOOKING_MODE_GROUP = "group"
 BOOKING_MODE_INDIVIDUAL = "individual"
 BOOKING_MODES = (BOOKING_MODE_GROUP, BOOKING_MODE_INDIVIDUAL)
 
+GROUP_TYPE_FAMILY = "family"
+GROUP_TYPE_LADIES = "ladies"
+GROUP_TYPE_MEN = "men"
+GROUP_TYPE_MIX = "mix"
+GROUP_TYPES = frozenset({GROUP_TYPE_FAMILY, GROUP_TYPE_LADIES, GROUP_TYPE_MEN, GROUP_TYPE_MIX})
+
+
+def normalize_group_type(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if not normalized:
+        return None
+    if normalized not in GROUP_TYPES:
+        raise ValueError("Invalid group type. Choose Family, Ladies, Men, or Mix.")
+    return normalized
+
+
+def group_type_label(value: str | None, *, language: str = "en") -> str:
+    labels_en = {
+        GROUP_TYPE_FAMILY: "Family",
+        GROUP_TYPE_LADIES: "Ladies",
+        GROUP_TYPE_MEN: "Men",
+        GROUP_TYPE_MIX: "Mix",
+    }
+    labels_ar = {
+        GROUP_TYPE_FAMILY: "عائلة",
+        GROUP_TYPE_LADIES: "سيدات",
+        GROUP_TYPE_MEN: "رجال",
+        GROUP_TYPE_MIX: "مختلط",
+    }
+    if not value:
+        return ""
+    lang = "ar" if language.startswith("ar") else "en"
+    table = labels_ar if lang == "ar" else labels_en
+    return table.get(value, value)
+
 
 def normalize_booking_mode(mode: str) -> str:
     if mode == BOOKING_MODE_INDIVIDUAL:

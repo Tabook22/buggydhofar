@@ -112,6 +112,7 @@ class BookingCreate(BaseModel):
     fleet_unit_ids: list[int]
     passengers: int
     booking_mode: str = "group"
+    group_type: str | None = None
     total_price: float
     payment_method: str
     waiver_accepted: bool
@@ -135,6 +136,7 @@ class BookingOut(BaseModel):
     fleet_unit_numbers: list[int] = []
     bike_count: int = 1
     booking_mode: str = "group"
+    group_type: str | None = None
     passengers: int
     subtotal: float | None = None
     tax_amount: float | None = None

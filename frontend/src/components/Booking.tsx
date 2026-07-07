@@ -5,6 +5,9 @@ import {
   api,
   bikesRequiredForPassengers,
   BookingMode,
+  GROUP_TYPE_OPTIONS,
+  GroupType,
+  groupTypeLabel,
   calculateBookingTotal,
   calculateSubtotal,
   calculateTax,
@@ -26,6 +29,7 @@ export type BookingSelection = {
   fleetUnitIds: number[];
   passengers: number;
   bookingMode: BookingMode;
+  groupType: GroupType | "";
 };
 
 export function calculateTotal(selection: BookingSelection) {
@@ -122,6 +126,12 @@ export function BookingSummaryCard({
             {selection.bookingMode === "individual" ? t("booking.modeIndividual") : t("booking.modeGroup")}
           </dd>
         </div>
+        {selection.bookingMode === "group" && selection.groupType && (
+          <div className="flex justify-between gap-4 border-b border-white/10 pb-3">
+            <dt className="text-white/60">{t("booking.groupType")}</dt>
+            <dd className="font-semibold">{groupTypeLabel(selection.groupType, i18n.language)}</dd>
+          </div>
+        )}
         <div className="flex justify-between gap-4 border-b border-white/10 pb-3">
           <dt className="text-white/60">{t("booking.bikes")}</dt>
           <dd className="max-w-[55%] text-end font-semibold">
@@ -291,10 +301,23 @@ export function BookingWidget({
     const needed = bikesRequiredForPassengers(passengers, mode);
     update({
       bookingMode: mode,
+      groupType: mode === "group" ? selection.groupType : "",
       passengers,
       fleetUnitIds: syncFleetSelection(selection.fleetUnitIds, fleetUnits, needed)
     });
   }
+
+  function selectGroupType(type: GroupType) {
+    update({ groupType: selection.groupType === type ? "" : type });
+  }
+
+  const groupTypeButtonClass = (active: boolean) =>
+    [
+      "flex items-center gap-3 rounded-2xl border px-4 py-3 text-start transition",
+      active
+        ? "border-forest-400 bg-forest-500/25 text-white ring-2 ring-forest-400/40"
+        : "border-white/10 bg-white/5 text-white/70 hover:border-white/20 hover:bg-white/10"
+    ].join(" ");
 
   function toggleFleetUnit(fleetUnitId: number) {
     const isSelected = selection.fleetUnitIds.includes(fleetUnitId);
@@ -343,6 +366,36 @@ export function BookingWidget({
             </button>
           </div>
         </div>
+        {selection.bookingMode === "group" && (
+          <div className="space-y-2 md:col-span-2">
+            <span className="text-sm font-semibold text-white/75">{t("booking.groupType")}</span>
+            <p className="text-xs text-white/50">{t("booking.groupTypeHelp")}</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {GROUP_TYPE_OPTIONS.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={groupTypeButtonClass(selection.groupType === type)}
+                  onClick={() => selectGroupType(type)}
+                >
+                  <span
+                    className={[
+                      "flex h-5 w-5 shrink-0 items-center justify-center rounded border",
+                      selection.groupType === type ? "border-forest-300 bg-forest-500 text-white" : "border-white/25 bg-transparent"
+                    ].join(" ")}
+                    aria-hidden="true"
+                  >
+                    {selection.groupType === type ? "✓" : ""}
+                  </span>
+                  <span className="font-bold">{t(`booking.groupType${type.charAt(0).toUpperCase()}${type.slice(1)}`)}</span>
+                </button>
+              ))}
+            </div>
+            {!selection.groupType && (
+              <p className="text-xs text-amber-300/90">{t("booking.groupTypeRequired")}</p>
+            )}
+          </div>
+        )}
         <label className="space-y-2">
           <span className="text-sm font-semibold text-white/75">{t("booking.selectDate")}</span>
           <input className={fieldClass} type="date" value={selection.date} min={new Date().toISOString().slice(0, 10)} onChange={(event) => update({ date: event.target.value, fleetUnitIds: [] })} />

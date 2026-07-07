@@ -190,6 +190,7 @@ export default function BookingPage() {
       fleet_unit_ids: selection.fleetUnitIds,
       passengers: selection.passengers,
       booking_mode: selection.bookingMode,
+      group_type: selection.bookingMode === "group" ? selection.groupType || null : null,
       total_price: calculateTotal(selection),
       payment_method: paymentMethod,
       waiver_accepted: true,
