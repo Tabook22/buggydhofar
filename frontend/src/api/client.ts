@@ -388,6 +388,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  getBookingConfirmation: (token: string) =>
+    request<BookingResult>(`/api/bookings/confirmation/${encodeURIComponent(token)}`),
   initAmwalPayment: (bookingId: number, languageId: string) =>
     request<AmwalSmartBoxConfig>("/api/payments/amwal/init", {
       method: "POST",

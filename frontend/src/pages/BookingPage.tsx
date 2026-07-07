@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { CheckCircle2 } from "lucide-react";
 import { api, BookingPayload, BookingResult, PaymentTransferInfo, RouteExperience, Vehicle } from "../api/client";
@@ -21,6 +21,7 @@ const emptyTransferInfo: PaymentTransferInfo = { ...defaultTransferSettings };
 export default function BookingPage() {
   const { t, i18n } = useTranslation();
   const location = useLocation();
+  const navigate = useNavigate();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [routes, setRoutes] = useState<RouteExperience[]>([]);
   const [selection, setSelection] = useState<BookingSelection>(() => resolveInitialBookingSelection(location.state));
@@ -100,6 +101,17 @@ export default function BookingPage() {
     window.location.href = "/";
   }
 
+  function goToConfirmation(booking: BookingResult, paymentSuccess = false) {
+    clearBookingDraft();
+    if (booking.check_in_token) {
+      const suffix = paymentSuccess ? "?payment=success" : "";
+      navigate(`/booking/confirmation/${booking.check_in_token}${suffix}`, { replace: true });
+      return;
+    }
+    setConfirmedBooking(booking);
+    setConfirmed(true);
+  }
+
   const handleConfirmationRedirect = useCallback(() => {
     finishConfirmation();
   }, []);
@@ -114,37 +126,31 @@ export default function BookingPage() {
           try {
             const payment = await api.completeAmwalPayment(booking.id, data);
             if (payment.success) {
-              setConfirmedBooking({ ...booking, payment_status: "paid", booking_status: "paid" });
-              setConfirmed(true);
+              goToConfirmation({ ...booking, payment_status: "paid", booking_status: "paid" }, true);
             } else {
               setPaymentError(t("booking.paymentFailed"));
-              setConfirmedBooking(booking);
-              setConfirmed(true);
+              goToConfirmation(booking);
             }
           } catch (error) {
             setPaymentError(error instanceof Error ? error.message : t("booking.paymentFailed"));
-            setConfirmedBooking(booking);
-            setConfirmed(true);
+            goToConfirmation(booking);
           } finally {
             setPayingOnline(false);
           }
         },
         onError: () => {
           setPaymentError(t("booking.paymentFailed"));
-          setConfirmedBooking(booking);
-          setConfirmed(true);
+          goToConfirmation(booking);
           setPayingOnline(false);
         },
         onCancel: () => {
-          setConfirmedBooking(booking);
-          setConfirmed(true);
+          goToConfirmation(booking);
           setPayingOnline(false);
         }
       });
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : t("booking.paymentUnavailable"));
-      setConfirmedBooking(booking);
-      setConfirmed(true);
+      goToConfirmation(booking);
       setPayingOnline(false);
     }
   }
@@ -195,8 +201,7 @@ export default function BookingPage() {
       if (paymentMethod === "visa") {
         await startOnlinePayment(result);
       } else {
-        setConfirmedBooking(result);
-        setConfirmed(true);
+        goToConfirmation(result);
       }
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : t("availability.loadError"));
@@ -238,6 +243,7 @@ export default function BookingPage() {
               onPayOnline={confirmedBooking.payment_method === "visa" && confirmedBooking.payment_status !== "paid" ? retryOnlinePayment : undefined}
               payingOnline={payingOnline}
               paymentError={paymentError}
+              autoRedirect={confirmedBooking.payment_status !== "paid"}
             />
           ) : payingOnline ? (
             <div className="glass mx-auto max-w-2xl rounded-[2rem] p-10 text-center">

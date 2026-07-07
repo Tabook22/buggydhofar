@@ -13,6 +13,8 @@ type BookingConfirmationCardProps = {
   onPayOnline?: () => void;
   payingOnline?: boolean;
   paymentError?: string;
+  paymentJustCompleted?: boolean;
+  autoRedirect?: boolean;
 };
 
 function paymentLabel(method: string, t: (key: string) => string) {
@@ -27,19 +29,23 @@ export function BookingConfirmationCard({
   onRedirect,
   onPayOnline,
   payingOnline = false,
-  paymentError = ""
+  paymentError = "",
+  paymentJustCompleted = false,
+  autoRedirect = true
 }: BookingConfirmationCardProps) {
   const { t } = useTranslation();
+  const isPaid = booking.payment_status === "paid";
   const [secondsLeft, setSecondsLeft] = useState(REDIRECT_SECONDS);
 
   useEffect(() => {
+    if (!autoRedirect) return;
     if (secondsLeft <= 0) {
       onRedirect();
       return;
     }
     const timer = window.setTimeout(() => setSecondsLeft((current) => current - 1), 1000);
     return () => window.clearTimeout(timer);
-  }, [secondsLeft, onRedirect]);
+  }, [secondsLeft, onRedirect, autoRedirect]);
 
   const bikesLabel =
     booking.fleet_unit_numbers && booking.fleet_unit_numbers.length > 0
@@ -49,28 +55,34 @@ export function BookingConfirmationCard({
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = String(secondsLeft % 60).padStart(2, "0");
 
-  const paymentStatusLabel =
-    booking.payment_status === "paid"
-      ? t("booking.paymentPaid")
-      : booking.payment_method === "visa"
-        ? t("booking.paymentPendingOnline")
-        : t("booking.paymentPendingTransfer");
+  const paymentStatusLabel = isPaid
+    ? t("booking.paymentPaid")
+    : booking.payment_method === "visa"
+      ? t("booking.paymentPendingOnline")
+      : t("booking.paymentPendingTransfer");
 
-  const bookingStatusLabel =
-    booking.booking_status === "paid"
-      ? t("booking.statusConfirmed")
-      : booking.booking_status === "cancelled"
-        ? t("booking.statusCancelled")
-        : t("booking.statusPending");
+  const bookingStatusLabel = isPaid
+    ? t("booking.statusConfirmed")
+    : booking.booking_status === "cancelled"
+      ? t("booking.statusCancelled")
+      : t("booking.statusPending");
+
+  const title = paymentJustCompleted || isPaid ? t("booking.paymentConfirmedTitle") : t("booking.confirmed");
+  const subtitle = paymentJustCompleted || isPaid ? t("booking.paymentConfirmedSubtitle") : t("booking.confirmedEmail");
 
   return (
     <div className="glass mx-auto max-w-3xl rounded-[2rem] p-8 md:p-10">
       <div className="text-center">
         <CheckCircle2 className="mx-auto text-forest-400" size={72} />
-        <h2 className="mt-6 text-3xl font-black">{t("booking.confirmed")}</h2>
-        <p className="mt-3 text-white/65">{t("booking.confirmedEmail")}</p>
+        <h2 className="mt-6 text-3xl font-black">{title}</h2>
+        <p className="mt-3 text-white/65">{subtitle}</p>
         {booking.booking_number && (
           <p className="mt-6 text-4xl font-black tracking-[0.2em] text-forest-400">{booking.booking_number}</p>
+        )}
+        {isPaid && (
+          <p className="mt-4 inline-flex rounded-full bg-forest-500/20 px-4 py-2 text-sm font-bold text-forest-200">
+            {t("booking.allSetBadge")}
+          </p>
         )}
       </div>
 
@@ -94,7 +106,9 @@ export function BookingConfirmationCard({
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between gap-4 border-b border-white/5 pb-2">
                 <dt className="text-white/55">{label}</dt>
-                <dd className="text-end font-semibold text-white/90">{value}</dd>
+                <dd className={`text-end font-semibold ${label === t("booking.paymentStatus") && isPaid ? "text-forest-300" : "text-white/90"}`}>
+                  {value}
+                </dd>
               </div>
             ))}
           </dl>
@@ -103,6 +117,7 @@ export function BookingConfirmationCard({
         <div className="flex flex-col items-center">
           <p className="mb-4 text-center text-sm font-bold text-forest-300">{t("booking.passQrTitle")}</p>
           {booking.check_in_url && <BookingQrCode checkInUrl={booking.check_in_url} size={200} hintKey="booking.passQrHint" />}
+          {isPaid && <p className="mt-4 max-w-[220px] text-center text-xs text-white/55">{t("booking.keepQrVisible")}</p>}
         </div>
       </div>
 
@@ -122,9 +137,13 @@ export function BookingConfirmationCard({
       )}
 
       <p className="mt-8 text-center text-sm text-white/55">{t("booking.saveBookingNumber")}</p>
-      <p className="mt-2 text-center text-sm text-white/45">
-        {t("booking.redirectingMinutes", { minutes, seconds })}
-      </p>
+      {isPaid ? (
+        <p className="mt-2 text-center text-sm text-white/45">{t("booking.paidStayHint")}</p>
+      ) : autoRedirect ? (
+        <p className="mt-2 text-center text-sm text-white/45">
+          {t("booking.redirectingMinutes", { minutes, seconds })}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -184,6 +184,7 @@ def build_smartbox_configure(
     amount: float,
     merchant_reference: str,
     language_id: str,
+    check_in_token: str = "",
 ) -> dict[str, Any]:
     amount_str = format_amount(amount)
     trx_datetime = trx_datetime_iso()
@@ -193,6 +194,9 @@ def build_smartbox_configure(
         request_datetime=trx_datetime,
     )
     site = public_site_url()
+    confirmation_url = (
+        f"{site}/booking/confirmation/{check_in_token}" if check_in_token else f"{site}/booking"
+    )
     return {
         "scriptUrl": smartbox_script_url(),
         "MID": _merchant_id(),
@@ -205,8 +209,8 @@ def build_smartbox_configure(
         "TrxDateTime": trx_datetime,
         "SessionToken": "",
         "ContactInfoType": 1,
-        "ReturnUrl": f"{site}/booking",
-        "CancelUrl": f"{site}/booking",
+        "ReturnUrl": confirmation_url,
+        "CancelUrl": confirmation_url,
         "IgnoreReceipt": "false",
         "SecureHash": secure_hash,
         "primaryColor": "#2d6a4f",

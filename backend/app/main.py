@@ -519,6 +519,14 @@ def create_booking(payload: schemas.BookingCreate, background_tasks: BackgroundT
     return booking_to_out(booking, db)
 
 
+@app.get("/api/bookings/confirmation/{token}", response_model=schemas.BookingOut)
+def get_booking_confirmation(token: str, db: Session = Depends(get_db)):
+    booking = db.query(models.Booking).filter(models.Booking.check_in_token == token).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    return booking_to_out(booking, db)
+
+
 @app.get("/api/check-in/{token}", response_model=schemas.BookingCheckInOut)
 def get_check_in_booking(token: str, db: Session = Depends(get_db)):
     booking = db.query(models.Booking).filter(models.Booking.check_in_token == token).first()
@@ -571,11 +579,13 @@ def init_amwal_payment(payload: schemas.AmwalInitRequest, db: Session = Depends(
         raise HTTPException(status_code=400, detail="This booking is already paid.")
     language = "ar" if payload.language_id.startswith("ar") else "en"
     merchant_reference = booking.booking_number or str(booking.id)
+    check_in_token = booking.check_in_token or ""
     try:
         config = amwal.build_smartbox_configure(
             amount=float(booking.total_price),
             merchant_reference=merchant_reference,
             language_id=language,
+            check_in_token=check_in_token,
         )
     except ValueError as exc:
         logger.exception("AMWAL configuration error for booking %s", booking.id)
