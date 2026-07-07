@@ -18,7 +18,7 @@ SUCCESS_RESPONSE_CODES = {"00", "0"}
 
 
 def amwal_configured() -> bool:
-    return bool(_secret_key() and _merchant_id() and _terminal_id())
+    return bool(_raw_secret_key() and _merchant_id() and _terminal_id())
 
 
 def _merchant_id() -> str:
@@ -29,8 +29,35 @@ def _terminal_id() -> str:
     return os.getenv("AMWAL_TID", "").strip()
 
 
+def _raw_secret_key() -> str:
+    return os.getenv("AMWAL_SECRET_KEY", "").strip().strip('"').strip("'")
+
+
 def _secret_key() -> str:
-    return os.getenv("AMWAL_SECRET_KEY", "").strip()
+    raw = _raw_secret_key()
+    if not raw:
+        raise ValueError("AMWAL_SECRET_KEY is not configured")
+    return _normalize_hex_key(raw)
+
+
+def _normalize_hex_key(raw: str) -> str:
+    cleaned = raw.replace("\r", "").replace("\n", "").strip()
+    if ":" in cleaned:
+        tail = cleaned.rsplit(":", 1)[-1].strip()
+        if len(tail) >= 32:
+            cleaned = tail
+    cleaned = "".join(cleaned.split())
+    if not cleaned:
+        raise ValueError("AMWAL_SECRET_KEY is empty.")
+    if len(cleaned) % 2 != 0:
+        raise ValueError("AMWAL_SECRET_KEY must be an even-length hexadecimal value.")
+    try:
+        bytes.fromhex(cleaned)
+    except ValueError as exc:
+        raise ValueError(
+            "AMWAL_SECRET_KEY must contain only hexadecimal characters (0-9, A-F)."
+        ) from exc
+    return cleaned
 
 
 def _environment() -> str:
@@ -71,15 +98,13 @@ def _sorted_param_string(params: dict[str, Any]) -> str:
 
 
 def generate_hmac_sha256(data_string: str, hex_key: str) -> str:
-    key_bytes = bytes.fromhex(hex_key)
+    key_bytes = bytes.fromhex(_normalize_hex_key(hex_key))
     digest = hmac.new(key_bytes, data_string.encode("utf-8"), hashlib.sha256).hexdigest()
     return digest.upper()
 
 
 def generate_request_secure_hash(params: dict[str, Any]) -> str:
     secret = _secret_key()
-    if not secret:
-        raise ValueError("AMWAL_SECRET_KEY is not configured")
     return generate_hmac_sha256(_sorted_param_string(params), secret)
 
 

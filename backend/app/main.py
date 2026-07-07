@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import logging
 import os
 
 try:
@@ -18,6 +19,8 @@ from .database import Base, SessionLocal, engine, get_db
 from .seed import seed_database, seed_payment_transfer_defaults
 
 Base.metadata.create_all(bind=engine)
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Khareef Adventure Booking API")
 
@@ -547,6 +550,14 @@ def admin_check_in_booking(
     return perform_booking_check_in(token, db)
 
 
+@app.get("/api/payments/amwal/status")
+def amwal_payment_status():
+    return {
+        "configured": amwal.amwal_configured(),
+        "environment": os.getenv("AMWAL_ENV", "uat").strip().lower() or "uat",
+    }
+
+
 @app.post("/api/payments/amwal/init", response_model=schemas.AmwalSmartBoxConfigOut)
 def init_amwal_payment(payload: schemas.AmwalInitRequest, db: Session = Depends(get_db)):
     if not amwal.amwal_configured():
@@ -559,14 +570,22 @@ def init_amwal_payment(payload: schemas.AmwalInitRequest, db: Session = Depends(
     if booking.payment_status == "paid":
         raise HTTPException(status_code=400, detail="This booking is already paid.")
     language = "ar" if payload.language_id.startswith("ar") else "en"
-    config = amwal.build_smartbox_configure(
-        amount=booking.total_price,
-        merchant_reference=booking.booking_number,
-        language_id=language,
-    )
+    merchant_reference = booking.booking_number or str(booking.id)
+    try:
+        config = amwal.build_smartbox_configure(
+            amount=float(booking.total_price),
+            merchant_reference=merchant_reference,
+            language_id=language,
+        )
+    except ValueError as exc:
+        logger.exception("AMWAL configuration error for booking %s", booking.id)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("AMWAL init failed for booking %s", booking.id)
+        raise HTTPException(status_code=500, detail="Payment initialization failed.") from exc
     return schemas.AmwalSmartBoxConfigOut(
         booking_id=booking.id,
-        booking_number=booking.booking_number,
+        booking_number=merchant_reference,
         script_url=config["scriptUrl"],
         mid=config["MID"],
         tid=config["TID"],
