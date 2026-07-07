@@ -37,6 +37,7 @@ export function BookingConfirmationCard({
 }: BookingConfirmationCardProps) {
   const { t, i18n } = useTranslation();
   const isPaid = booking.payment_status === "paid";
+  const paymentStepComplete = isPaid || booking.payment_method === "bank_transfer";
   const [secondsLeft, setSecondsLeft] = useState(REDIRECT_SECONDS);
 
   useEffect(() => {
@@ -88,13 +89,17 @@ export function BookingConfirmationCard({
 
   const title = lookupMode
     ? t("lookup.statusTitle")
-    : paymentJustCompleted || isPaid
-      ? t("booking.paymentConfirmedTitle")
+    : paymentJustCompleted || paymentStepComplete
+      ? isPaid
+        ? t("booking.paymentConfirmedTitle")
+        : t("booking.transferConfirmedTitle")
       : t("booking.confirmed");
   const subtitle = lookupMode
     ? t("lookup.statusSubtitle")
-    : paymentJustCompleted || isPaid
-      ? t("booking.paymentConfirmedSubtitle")
+    : paymentJustCompleted || paymentStepComplete
+      ? isPaid
+        ? t("booking.paymentConfirmedSubtitle")
+        : t("booking.transferConfirmedSubtitle")
       : t("booking.confirmedEmail");
 
   return (
@@ -129,9 +134,19 @@ export function BookingConfirmationCard({
         </div>
 
         <div className="flex flex-col items-center">
-          <p className="mb-4 text-center text-sm font-bold text-forest-300">{t("booking.passQrTitle")}</p>
-          {booking.check_in_url && <BookingQrCode checkInUrl={booking.check_in_url} size={200} hintKey="booking.passQrHint" />}
-          {isPaid && <p className="mt-4 max-w-[220px] text-center text-xs text-white/55">{t("booking.keepQrVisible")}</p>}
+          {paymentStepComplete ? (
+            <>
+              <p className="mb-4 text-center text-sm font-bold text-forest-300">{t("booking.passQrTitle")}</p>
+              {booking.check_in_url && <BookingQrCode checkInUrl={booking.check_in_url} size={200} hintKey="booking.passQrHint" />}
+              <p className="mt-4 max-w-[220px] text-center text-xs text-white/55">
+                {isPaid ? t("booking.keepQrVisible") : t("booking.transferQrHint")}
+              </p>
+            </>
+          ) : (
+            <p className="max-w-[220px] rounded-2xl border border-white/10 bg-white/5 p-5 text-center text-sm text-white/60">
+              {t("booking.qrAfterPayment")}
+            </p>
+          )}
         </div>
       </div>
 

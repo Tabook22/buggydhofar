@@ -42,6 +42,9 @@ export default function BookingPage() {
   const [waiverAccepted, setWaiverAccepted] = useState(false);
   const [payingOnline, setPayingOnline] = useState(false);
   const [paymentError, setPaymentError] = useState("");
+  const [pendingVisaBooking, setPendingVisaBooking] = useState<BookingResult | null>(null);
+  const [pendingBankPayload, setPendingBankPayload] = useState<BookingPayload | null>(null);
+  const [confirmingTransfer, setConfirmingTransfer] = useState(false);
 
   useEffect(() => {
     Promise.all([api.getVehicles(), api.getRoutes(), api.getSiteContent().catch(() => null)]).then(
@@ -88,6 +91,8 @@ export default function BookingPage() {
 
   useEffect(() => {
     setWaiverAccepted(false);
+    setPendingVisaBooking(null);
+    setPendingBankPayload(null);
   }, [form.customer_name, form.national_id, form.phone, form.email]);
 
   useEffect(() => {
@@ -103,6 +108,8 @@ export default function BookingPage() {
 
   function goToConfirmation(booking: BookingResult, paymentSuccess = false) {
     clearBookingDraft();
+    setPendingVisaBooking(null);
+    setPendingBankPayload(null);
     if (booking.check_in_token) {
       const suffix = paymentSuccess ? "?payment=success" : "";
       navigate(`/booking/confirmation/${booking.check_in_token}${suffix}`, { replace: true });
@@ -119,6 +126,7 @@ export default function BookingPage() {
   async function startOnlinePayment(booking: BookingResult) {
     setPayingOnline(true);
     setPaymentError("");
+    setPendingVisaBooking(booking);
     try {
       const config = await api.initAmwalPayment(booking.id, i18n.language.startsWith("ar") ? "ar" : "en");
       await openAmwalSmartBox(config, {
@@ -129,28 +137,24 @@ export default function BookingPage() {
               goToConfirmation({ ...booking, payment_status: "paid", booking_status: "paid" }, true);
             } else {
               setPaymentError(t("booking.paymentFailed"));
-              goToConfirmation(booking);
             }
           } catch (error) {
             setPaymentError(error instanceof Error ? error.message : t("booking.paymentFailed"));
-            goToConfirmation(booking);
           } finally {
             setPayingOnline(false);
           }
         },
         onError: () => {
           setPaymentError(t("booking.paymentFailed"));
-          goToConfirmation(booking);
           setPayingOnline(false);
         },
         onCancel: () => {
-          goToConfirmation(booking);
+          setPaymentError(t("booking.paymentCancelled"));
           setPayingOnline(false);
         }
       });
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : t("booking.paymentUnavailable"));
-      goToConfirmation(booking);
       setPayingOnline(false);
     }
   }
@@ -160,22 +164,8 @@ export default function BookingPage() {
     await startOnlinePayment(confirmedBooking);
   }, [confirmedBooking, payingOnline, i18n.language, t]);
 
-  async function submitBooking(event: FormEvent) {
-    event.preventDefault();
-    setSubmitError("");
-    if (!isBookingSelectionReady(selection)) {
-      setSubmitError(t("booking.unavailable"));
-      return;
-    }
-    if (!waiverAccepted) {
-      setSubmitError(t("booking.waiverRequired"));
-      return;
-    }
-    if (!paymentMethod) {
-      setSubmitError(t("booking.paymentLocked"));
-      return;
-    }
-    const payload: BookingPayload = {
+  function buildBookingPayload(): BookingPayload {
+    return {
       customer_name: form.customer_name.trim(),
       phone: form.phone.trim(),
       email: form.email.trim(),
@@ -196,14 +186,54 @@ export default function BookingPage() {
       waiver_accepted: true,
       waiver_language: i18n.language.startsWith("ar") ? "ar" : "en"
     };
+  }
+
+  async function confirmBankTransferBooking() {
+    if (!pendingBankPayload) return;
+    setConfirmingTransfer(true);
+    setSubmitError("");
+    try {
+      const result = await api.createBooking(pendingBankPayload);
+      setBookingNumber(result.booking_number);
+      setShowTransferModal(false);
+      goToConfirmation(result);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : t("availability.loadError"));
+    } finally {
+      setConfirmingTransfer(false);
+    }
+  }
+
+  async function submitBooking(event: FormEvent) {
+    event.preventDefault();
+    setSubmitError("");
+    setPaymentError("");
+    if (!isBookingSelectionReady(selection)) {
+      setSubmitError(t("booking.unavailable"));
+      return;
+    }
+    if (!waiverAccepted) {
+      setSubmitError(t("booking.waiverRequired"));
+      return;
+    }
+    if (!paymentMethod) {
+      setSubmitError(t("booking.paymentLocked"));
+      return;
+    }
+    if (paymentMethod === "visa" && pendingVisaBooking) {
+      await startOnlinePayment(pendingVisaBooking);
+      return;
+    }
+    const payload = buildBookingPayload();
+    if (paymentMethod === "bank_transfer") {
+      setPendingBankPayload(payload);
+      setShowTransferModal(true);
+      return;
+    }
     try {
       const result = await api.createBooking(payload);
       setBookingNumber(result.booking_number);
-      if (paymentMethod === "visa") {
-        await startOnlinePayment(result);
-      } else {
-        goToConfirmation(result);
-      }
+      await startOnlinePayment(result);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : t("availability.loadError"));
     }
@@ -341,11 +371,27 @@ export default function BookingPage() {
                     </fieldset>
                   </div>
                   {submitError && <p className="mt-4 rounded-2xl bg-red-500/15 px-4 py-3 text-sm text-red-200">{submitError}</p>}
+                  {paymentError && paymentMethod === "visa" && (
+                    <div className="mt-4 rounded-2xl bg-red-500/15 px-4 py-3 text-sm text-red-200">
+                      <p>{paymentError}</p>
+                      {pendingVisaBooking && (
+                        <p className="mt-2 text-white/70">
+                          {t("booking.paymentRetryHint", { number: pendingVisaBooking.booking_number })}
+                        </p>
+                      )}
+                    </div>
+                  )}
                   <button
-                    disabled={!canSubmit || payingOnline}
+                    disabled={!canSubmit || payingOnline || confirmingTransfer}
                     className="mt-8 w-full rounded-2xl bg-forest-500 px-6 py-4 font-bold text-white shadow-glow transition hover:bg-forest-400 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {payingOnline ? t("booking.paymentProcessing") : paymentMethod === "visa" ? t("booking.submitAndPay") : t("booking.submit")}
+                    {payingOnline
+                      ? t("booking.paymentProcessing")
+                      : paymentMethod === "visa" && pendingVisaBooking
+                        ? t("booking.retryPayment")
+                        : paymentMethod === "visa"
+                          ? t("booking.submitAndPay")
+                          : t("booking.continueToTransfer")}
                   </button>
                 </form>
               </div>
@@ -354,7 +400,18 @@ export default function BookingPage() {
           )}
         </div>
       </main>
-      <BankTransferModal info={transferInfo} open={showTransferModal} onClose={() => setShowTransferModal(false)} />
+      <BankTransferModal
+        info={transferInfo}
+        open={showTransferModal}
+        onClose={() => {
+          if (!confirmingTransfer) {
+            setShowTransferModal(false);
+          }
+        }}
+        onConfirm={pendingBankPayload ? confirmBankTransferBooking : undefined}
+        confirming={confirmingTransfer}
+        totalAmount={pendingBankPayload ? String(pendingBankPayload.total_price) : undefined}
+      />
     </PageShell>
   );
 }

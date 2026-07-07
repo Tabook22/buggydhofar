@@ -6,6 +6,9 @@ type Props = {
   info: PaymentTransferInfo;
   open: boolean;
   onClose: () => void;
+  onConfirm?: () => void;
+  confirming?: boolean;
+  totalAmount?: string;
 };
 
 function DetailRow({ label, value, visible }: { label: string; value: string; visible: boolean }) {
@@ -18,7 +21,7 @@ function DetailRow({ label, value, visible }: { label: string; value: string; vi
   );
 }
 
-export function BankTransferModal({ info, open, onClose }: Props) {
+export function BankTransferModal({ info, open, onClose, onConfirm, confirming = false, totalAmount }: Props) {
   const { i18n, t } = useTranslation();
   const isAr = i18n.language.startsWith("ar");
 
@@ -74,6 +77,11 @@ export function BankTransferModal({ info, open, onClose }: Props) {
           </button>
         </div>
         <p className="mt-2 text-sm text-white/60">{t("booking.transferModalIntro")}</p>
+        {totalAmount && (
+          <p className="mt-4 rounded-xl border border-forest-500/30 bg-forest-500/10 px-4 py-3 text-sm font-semibold text-forest-100">
+            {t("booking.transferAmountDue", { amount: totalAmount })}
+          </p>
+        )}
 
         {hasBank && (
           <section className="mt-6 space-y-3">
@@ -106,13 +114,26 @@ export function BankTransferModal({ info, open, onClose }: Props) {
           <p className="mt-6 rounded-xl bg-white/5 px-4 py-3 text-sm text-white/55">{t("booking.transferNotConfigured")}</p>
         )}
 
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-6 w-full rounded-2xl bg-forest-500 px-6 py-3 font-bold text-white hover:bg-forest-400"
-        >
-          {t("booking.transferClose")}
-        </button>
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row-reverse">
+          {onConfirm && (
+            <button
+              type="button"
+              disabled={confirming}
+              onClick={onConfirm}
+              className="w-full rounded-2xl bg-forest-500 px-6 py-3 font-bold text-white hover:bg-forest-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {confirming ? t("booking.transferConfirming") : t("booking.transferConfirm")}
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={confirming}
+            onClick={onClose}
+            className="w-full rounded-2xl border border-white/15 bg-white/5 px-6 py-3 font-bold text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {t("booking.transferBack")}
+          </button>
+        </div>
       </div>
     </div>
   );

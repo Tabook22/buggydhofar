@@ -563,7 +563,10 @@ def create_booking(payload: schemas.BookingCreate, background_tasks: BackgroundT
     db.commit()
     db.refresh(booking)
 
-    background_tasks.add_task(email_service.send_booking_confirmation_task, booking.id)
+    # Visa: confirmation email is sent after successful online payment (_mark_booking_paid).
+    # Bank transfer: customer confirms transfer in the UI before this request is made.
+    if payload.payment_method == "bank_transfer":
+        background_tasks.add_task(email_service.send_booking_confirmation_task, booking.id)
 
     return booking_to_out(booking, db)
 
