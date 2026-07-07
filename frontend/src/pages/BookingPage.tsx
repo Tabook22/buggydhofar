@@ -8,6 +8,14 @@ import { BookingSelection, BookingSummaryCard, BookingWidget, calculateTotal } f
 import { LiabilityWaiver } from "../components/LiabilityWaiver";
 import { PageShell } from "../components/Layout";
 import { defaultBookingSelection, clearBookingDraft, isBookingSelectionReady, resolveInitialBookingSelection, saveBookingDraft } from "../lib/bookingDraft";
+import {
+  clearBookingSession,
+  clearPendingVisaBooking,
+  finalizePaidBookingSession,
+  loadPendingVisaBooking,
+  savePendingVisaBooking,
+  shouldBlockBookingPage
+} from "../lib/bookingSession";
 import { openAmwalSmartBox } from "../lib/amwalSmartBox";
 
 const defaultSelection = defaultBookingSelection;
@@ -37,7 +45,32 @@ export default function BookingPage() {
   const [waiverAccepted, setWaiverAccepted] = useState(false);
   const [payingOnline, setPayingOnline] = useState(false);
   const [paymentError, setPaymentError] = useState("");
-  const [pendingVisaBooking, setPendingVisaBooking] = useState<BookingResult | null>(null);
+  const [pendingVisaBooking, setPendingVisaBooking] = useState<BookingResult | null>(() => loadPendingVisaBooking());
+
+  useEffect(() => {
+    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    const isBackNavigation = nav?.type === "back_forward";
+
+    if (isBackNavigation && shouldBlockBookingPage()) {
+      clearBookingSession();
+      navigate("/", { replace: true });
+      return;
+    }
+
+    if (!isBackNavigation && shouldBlockBookingPage()) {
+      clearBookingSession();
+    }
+  }, [navigate]);
+
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted || !shouldBlockBookingPage()) return;
+      clearBookingSession();
+      navigate("/", { replace: true });
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, [navigate]);
 
   useEffect(() => {
     Promise.all([api.getVehicles(), api.getRoutes()]).then(([vehicleData, routeData]) => {
@@ -59,6 +92,7 @@ export default function BookingPage() {
   useEffect(() => {
     setWaiverAccepted(false);
     setPendingVisaBooking(null);
+    clearPendingVisaBooking();
   }, [form.customer_name, form.national_id, form.phone, form.email]);
 
   function finishConfirmation() {
@@ -67,8 +101,14 @@ export default function BookingPage() {
   }
 
   function goToConfirmation(booking: BookingResult, paymentSuccess = false) {
-    clearBookingDraft();
+    setPaymentError("");
+    setPayingOnline(false);
     setPendingVisaBooking(null);
+    if (paymentSuccess) {
+      finalizePaidBookingSession();
+    } else {
+      clearBookingDraft();
+    }
     if (booking.check_in_token) {
       const suffix = paymentSuccess ? "?payment=success" : "";
       navigate(`/booking/confirmation/${booking.check_in_token}${suffix}`, { replace: true });
@@ -86,6 +126,7 @@ export default function BookingPage() {
     setPayingOnline(true);
     setPaymentError("");
     setPendingVisaBooking(booking);
+    savePendingVisaBooking(booking);
     try {
       const config = await api.initAmwalPayment(booking.id, i18n.language.startsWith("ar") ? "ar" : "en");
       await openAmwalSmartBox(config, {
@@ -117,11 +158,6 @@ export default function BookingPage() {
       setPayingOnline(false);
     }
   }
-
-  const retryOnlinePayment = useCallback(async () => {
-    if (!confirmedBooking || confirmedBooking.payment_method !== "visa" || payingOnline) return;
-    await startOnlinePayment(confirmedBooking);
-  }, [confirmedBooking, payingOnline, i18n.language, t]);
 
   function buildBookingPayload(): BookingPayload {
     return {
@@ -195,10 +231,7 @@ export default function BookingPage() {
                 ]
               }
               onRedirect={handleConfirmationRedirect}
-              onPayOnline={confirmedBooking.payment_method === "visa" && confirmedBooking.payment_status !== "paid" ? retryOnlinePayment : undefined}
-              payingOnline={payingOnline}
-              paymentError={paymentError}
-              autoRedirect={confirmedBooking.payment_status !== "paid"}
+              autoRedirect={false}
             />
           ) : payingOnline ? (
             <div className="glass mx-auto max-w-2xl rounded-[2rem] p-10 text-center">

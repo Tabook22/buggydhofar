@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api, BookingResult } from "../api/client";
 import { BookingConfirmationCard } from "../components/BookingConfirmationCard";
 import { PageShell } from "../components/Layout";
-import { openAmwalSmartBox } from "../lib/amwalSmartBox";
+import { clearBookingSession, finalizePaidBookingSession } from "../lib/bookingSession";
 
 const AMWAL_CALLBACK_KEYS = [
   "amount",
@@ -33,6 +33,10 @@ function readAmwalCallback(searchParams: URLSearchParams): Record<string, string
   return found ? data : null;
 }
 
+function hasAmwalCallbackParams(searchParams: URLSearchParams): boolean {
+  return AMWAL_CALLBACK_KEYS.some((key) => searchParams.has(key));
+}
+
 export default function BookingConfirmationPage() {
   const { token = "" } = useParams();
   const [searchParams] = useSearchParams();
@@ -41,7 +45,6 @@ export default function BookingConfirmationPage() {
   const [booking, setBooking] = useState<BookingResult | null>(null);
   const [routes, setRoutes] = useState<{ id: number; name_en: string; name_ar: string }[]>([]);
   const [loading, setLoading] = useState(true);
-  const [payingOnline, setPayingOnline] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [paymentJustCompleted, setPaymentJustCompleted] = useState(searchParams.get("payment") === "success");
   const callbackQuery = searchParams.toString();
@@ -99,7 +102,36 @@ export default function BookingConfirmationPage() {
     return () => {
       cancelled = true;
     };
-  }, [token, loadBooking, callbackQuery, t]);
+  }, [token, loadBooking, callbackQuery, t, searchParams]);
+
+  const isPaid = booking?.payment_status === "paid";
+
+  useEffect(() => {
+    if (!token || !isPaid) return;
+
+    finalizePaidBookingSession();
+
+    const cleanUrl = `/booking/confirmation/${token}?payment=success`;
+    if (hasAmwalCallbackParams(searchParams) || searchParams.get("payment") !== "success") {
+      navigate(cleanUrl, { replace: true });
+    }
+  }, [token, isPaid, navigate, searchParams]);
+
+  useEffect(() => {
+    if (!token || !isPaid) return;
+
+    const cleanUrl = `/booking/confirmation/${token}?payment=success`;
+    window.history.replaceState({ bookingConfirmed: true }, "", cleanUrl);
+    window.history.pushState({ bookingConfirmed: true }, "", cleanUrl);
+
+    const onPopState = () => {
+      clearBookingSession();
+      navigate("/", { replace: true });
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [token, isPaid, navigate]);
 
   const routeName = useMemo(() => {
     if (!booking) return undefined;
@@ -108,46 +140,8 @@ export default function BookingConfirmationPage() {
     return i18n.language.startsWith("ar") ? route.name_ar : route.name_en;
   }, [booking, routes, i18n.language]);
 
-  async function startOnlinePayment(current: BookingResult) {
-    setPayingOnline(true);
-    setPaymentError("");
-    try {
-      const config = await api.initAmwalPayment(current.id, i18n.language.startsWith("ar") ? "ar" : "en");
-      await openAmwalSmartBox(config, {
-        onComplete: async (data) => {
-          try {
-            const payment = await api.completeAmwalPayment(current.id, data);
-            if (payment.success) {
-              const paidBooking = { ...current, payment_status: "paid", booking_status: "paid" };
-              setBooking(paidBooking);
-              setPaymentJustCompleted(true);
-              if (token) {
-                navigate(`/booking/confirmation/${token}?payment=success`, { replace: true });
-              }
-            } else {
-              setPaymentError(t("booking.paymentFailed"));
-            }
-          } catch (error) {
-            setPaymentError(error instanceof Error ? error.message : t("booking.paymentFailed"));
-          } finally {
-            setPayingOnline(false);
-          }
-        },
-        onError: () => {
-          setPaymentError(t("booking.paymentFailed"));
-          setPayingOnline(false);
-        },
-        onCancel: () => {
-          setPayingOnline(false);
-        }
-      });
-    } catch (error) {
-      setPaymentError(error instanceof Error ? error.message : t("booking.paymentUnavailable"));
-      setPayingOnline(false);
-    }
-  }
-
   function handleGoHome() {
+    clearBookingSession();
     window.location.href = "/";
   }
 
@@ -169,8 +163,8 @@ export default function BookingConfirmationPage() {
           {!loading && !booking && (
             <div className="glass mx-auto max-w-2xl rounded-[2rem] p-10 text-center">
               <p className="text-red-200">{paymentError || t("booking.passNotFound")}</p>
-              <Link to="/booking" className="mt-6 inline-block font-bold text-forest-300 hover:underline">
-                {t("booking.backToBooking")}
+              <Link to="/" className="mt-6 inline-block font-bold text-forest-300 hover:underline">
+                {t("nav.home")}
               </Link>
             </div>
           )}
@@ -180,13 +174,9 @@ export default function BookingConfirmationPage() {
               booking={booking}
               routeName={routeName}
               onRedirect={handleGoHome}
-              onPayOnline={
-                booking.payment_method === "visa" && booking.payment_status !== "paid" ? () => startOnlinePayment(booking) : undefined
-              }
-              payingOnline={payingOnline}
-              paymentError={paymentError}
+              paymentError={isPaid ? "" : paymentError}
               paymentJustCompleted={paymentJustCompleted}
-              autoRedirect={booking.payment_status !== "paid"}
+              autoRedirect={!isPaid}
             />
           )}
         </div>

@@ -82,8 +82,12 @@ export function BookingConfirmationCard({
     ...(groupTypeRow ? [groupTypeRow] : []),
     [t("booking.buggyBike"), bikesLabel],
     [t("booking.total"), `${booking.total_price} ${t("booking.omr")}`],
-    [t("booking.payment"), paymentLabel(booking.payment_method, t)],
-    [t("booking.paymentStatus"), paymentStatusLabel],
+    ...(!isPaid
+      ? [
+          [t("booking.payment"), paymentLabel(booking.payment_method, t)] as [string, string],
+          [t("booking.paymentStatus"), paymentStatusLabel] as [string, string]
+        ]
+      : []),
     [t("booking.bookingStatus"), bookingStatusLabel]
   ];
 
