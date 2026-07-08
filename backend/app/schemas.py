@@ -251,6 +251,10 @@ class BookingStatusUpdate(BaseModel):
     booking_status: str
 
 
+class BookingBulkDelete(BaseModel):
+    ids: list[int]
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str

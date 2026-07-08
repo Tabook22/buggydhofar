@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, LayoutGrid, List, Search } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, LayoutGrid, List, Search, Trash2 } from "lucide-react";
 import { api, groupTypeLabel, isAdminAuthError, normalizeGroupType } from "../api/client";
 import { qrCodeImageUrl } from "../lib/bookingQr";
 import { BookingQrCode } from "./BookingQrCode";
@@ -140,6 +140,9 @@ export function AdminBookingsPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedBookingIds, setSelectedBookingIds] = useState<number[]>([]);
+  const [deletingBookings, setDeletingBookings] = useState(false);
+  const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
 
   const loadBookings = useCallback(
     async (year: number | null, month: number | null, day: number | null) => {
@@ -179,6 +182,58 @@ export function AdminBookingsPanel({
       return bookings.find((booking) => booking.id === current.id) ?? current;
     });
   }, [bookings]);
+
+  function bookingLabel(id: number) {
+    return bookings.find((booking) => booking.id === id)?.booking_number || String(id);
+  }
+
+  function toggleBookingSelection(id: number) {
+    setSelectedBookingIds((current) =>
+      current.includes(id) ? current.filter((bookingId) => bookingId !== id) : [...current, id]
+    );
+  }
+
+  function closePanelsForDeleted(ids: number[]) {
+    if (detailBooking && ids.includes(detailBooking.id)) setDetailBooking(null);
+    if (replyBooking && ids.includes(replyBooking.id)) setReplyBooking(null);
+    if (waiverBooking && ids.includes(waiverBooking.id)) setWaiverBooking(null);
+    if (qrBooking && ids.includes(qrBooking.id)) setQrBooking(null);
+  }
+
+  async function deleteBookings(ids: number[]) {
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) return;
+
+    const message =
+      uniqueIds.length === 1
+        ? t("admin.deleteBookingConfirm", { number: bookingLabel(uniqueIds[0]) })
+        : t("admin.deleteBookingsConfirm", { count: uniqueIds.length });
+    if (!window.confirm(message)) return;
+
+    setDeletingBookings(true);
+    setDeleteStatus(null);
+    try {
+      let deletedCount = uniqueIds.length;
+      if (uniqueIds.length === 1) {
+        await api.adminSend(`/api/admin/bookings/${uniqueIds[0]}`, token, "DELETE");
+      } else {
+        const result = await api.adminSend<{ count: number }>("/api/admin/bookings/bulk-delete", token, "POST", {
+          ids: uniqueIds
+        });
+        deletedCount = result?.count ?? uniqueIds.length;
+      }
+      setDeleteStatus(t("admin.bookingsDeleted", { count: deletedCount }));
+      setSelectedBookingIds((current) => current.filter((id) => !uniqueIds.includes(id)));
+      closePanelsForDeleted(uniqueIds);
+      await loadBookings(selectedYear, selectedMonth, selectedDay);
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : t("admin.deleteBookingFailed");
+      if (isAdminAuthError(messageText)) onAuthFailure(messageText);
+      else setDeleteStatus(messageText);
+    } finally {
+      setDeletingBookings(false);
+    }
+  }
 
   async function updateStatus(id: number, booking_status: string) {
     try {
@@ -255,10 +310,24 @@ export function AdminBookingsPanel({
       items: filteredBookings.slice(startIndex, endIndex)
     };
   }, [filteredBookings, currentPage]);
+
+  function toggleSelectAllOnPage() {
+    const pageIds = pagination.items.map((booking) => booking.id);
+    const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedBookingIds.includes(id));
+    setSelectedBookingIds((current) =>
+      allSelected ? current.filter((id) => !pageIds.includes(id)) : [...new Set([...current, ...pageIds])]
+    );
+  }
+
+  const pageBookingIds = pagination.items.map((booking) => booking.id);
+  const allOnPageSelected = pageBookingIds.length > 0 && pageBookingIds.every((id) => selectedBookingIds.includes(id));
+  const someOnPageSelected = pageBookingIds.some((id) => selectedBookingIds.includes(id));
   const selectedMonthData = archive?.years.find((y) => y.year === selectedYear)?.months.find((m) => m.month === selectedMonth);
 
   useEffect(() => {
     setCurrentPage(1);
+    setSelectedBookingIds([]);
+    setDeleteStatus(null);
   }, [searchQuery, selectedYear, selectedMonth, selectedDay, viewMode]);
 
   useEffect(() => {
@@ -360,6 +429,15 @@ export function AdminBookingsPanel({
           }`}
         >
           {t("admin.replyEmail")}
+        </button>
+        <button
+          type="button"
+          disabled={deletingBookings}
+          onClick={() => deleteBookings([booking.id])}
+          className="inline-flex items-center gap-1 rounded-xl border border-red-300/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+        >
+          <Trash2 size={14} />
+          {t("admin.delete")}
         </button>
       </div>
     );
@@ -488,6 +566,17 @@ export function AdminBookingsPanel({
               {!loading && ` · ${t("admin.resultsCount", { count: pagination.total })}`}
             </p>
             <div className="flex flex-wrap items-center gap-2">
+              {selectedBookingIds.length > 0 && (
+                <button
+                  type="button"
+                  disabled={deletingBookings}
+                  onClick={() => deleteBookings(selectedBookingIds)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-red-300/30 bg-red-500/15 px-3 py-2 text-xs font-bold text-red-200 transition hover:bg-red-500/25 disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                  {t("admin.deleteSelected")} ({selectedBookingIds.length})
+                </button>
+              )}
               <div className="inline-flex rounded-xl border border-white/10 bg-black/20 p-1">
                 <button
                   type="button"
@@ -513,6 +602,10 @@ export function AdminBookingsPanel({
             </div>
           </div>
 
+          {deleteStatus && (
+            <p className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-forest-200">{deleteStatus}</p>
+          )}
+
           <label className="relative mt-4 block">
             <Search size={16} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-white/40" />
             <input
@@ -536,14 +629,29 @@ export function AdminBookingsPanel({
                 pagination.items.map((booking) => {
                   const isCancelled = booking.booking_status === "cancelled";
                   return (
-                    <button
+                    <div
                       key={booking.id}
-                      type="button"
-                      onClick={() => setDetailBooking(booking)}
-                      className={`rounded-2xl border border-white/10 bg-black/20 p-4 text-start transition hover:border-forest-500/35 hover:bg-black/30 ${
+                      className={`relative rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:border-forest-500/35 hover:bg-black/30 ${
                         isCancelled ? "border-red-500/20" : ""
-                      }`}
+                      } ${selectedBookingIds.includes(booking.id) ? "border-forest-400/40 ring-1 ring-forest-400/25" : ""}`}
                     >
+                      <label
+                        className="absolute start-3 top-3 z-10 flex items-center"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedBookingIds.includes(booking.id)}
+                          onChange={() => toggleBookingSelection(booking.id)}
+                          className="h-4 w-4 rounded border-white/20 bg-white/10 text-forest-500 focus:ring-forest-400"
+                          aria-label={t("admin.selectAllOnPage")}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setDetailBooking(booking)}
+                        className="w-full pt-6 text-start"
+                      >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <p className="font-mono text-lg font-black tracking-wider text-forest-400">{booking.booking_number}</p>
@@ -562,7 +670,19 @@ export function AdminBookingsPanel({
                         ) : null}
                       </div>
                       <p className="mt-3 text-xs text-white/45">{t("admin.tapForDetails")}</p>
-                    </button>
+                      </button>
+                      <div className="mt-3 flex justify-end">
+                        <button
+                          type="button"
+                          disabled={deletingBookings}
+                          onClick={() => deleteBookings([booking.id])}
+                          className="inline-flex items-center gap-1 rounded-xl border border-red-300/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+                        >
+                          <Trash2 size={14} />
+                          {t("admin.delete")}
+                        </button>
+                      </div>
+                    </div>
                   );
                 })}
               {!loading && filteredBookings.length === 0 && (
@@ -578,6 +698,18 @@ export function AdminBookingsPanel({
             <table className="w-full min-w-[980px] text-sm">
               <thead className="text-white/60">
                 <tr>
+                  <th className="w-10 p-3 text-start">
+                    <input
+                      type="checkbox"
+                      checked={allOnPageSelected}
+                      ref={(input) => {
+                        if (input) input.indeterminate = someOnPageSelected && !allOnPageSelected;
+                      }}
+                      onChange={toggleSelectAllOnPage}
+                      className="h-4 w-4 rounded border-white/20 bg-white/10 text-forest-500 focus:ring-forest-400"
+                      aria-label={t("admin.selectAllOnPage")}
+                    />
+                  </th>
                   <th className="p-3 text-start">{t("booking.bookingNumber")}</th>
                   <th className="p-3 text-start">{t("booking.fullName")}</th>
                   <th className="p-3 text-start">{t("booking.email")}</th>
@@ -595,7 +727,7 @@ export function AdminBookingsPanel({
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={12} className="p-6 text-center text-white/50">
+                    <td colSpan={13} className="p-6 text-center text-white/50">
                       {t("availability.loading")}
                     </td>
                   </tr>
@@ -606,8 +738,19 @@ export function AdminBookingsPanel({
                     return (
                     <tr
                       key={booking.id}
-                      className={`border-t border-white/10 ${isCancelled ? "text-red-400" : ""}`}
+                      className={`border-t border-white/10 ${isCancelled ? "text-red-400" : ""} ${
+                        selectedBookingIds.includes(booking.id) ? "bg-forest-500/5" : ""
+                      }`}
                     >
+                      <td className="p-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedBookingIds.includes(booking.id)}
+                          onChange={() => toggleBookingSelection(booking.id)}
+                          className="h-4 w-4 rounded border-white/20 bg-white/10 text-forest-500 focus:ring-forest-400"
+                          aria-label={booking.booking_number}
+                        />
+                      </td>
                       <td className="p-3 font-mono font-bold tracking-wider">
                         <span className="inline-flex items-center gap-2">
                           {isCancelled && (
@@ -714,6 +857,15 @@ export function AdminBookingsPanel({
                           >
                             {t("admin.replyEmail")}
                           </button>
+                          <button
+                            type="button"
+                            disabled={deletingBookings}
+                            onClick={() => deleteBookings([booking.id])}
+                            className="inline-flex items-center gap-1 rounded-xl border border-red-300/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+                          >
+                            <Trash2 size={14} />
+                            {t("admin.delete")}
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -721,7 +873,7 @@ export function AdminBookingsPanel({
                   })}
                 {!loading && filteredBookings.length === 0 && (
                   <tr>
-                    <td colSpan={12} className="p-8 text-center text-white/50">
+                    <td colSpan={13} className="p-8 text-center text-white/50">
                       {t("admin.noBookingsInRange")}
                     </td>
                   </tr>
@@ -845,13 +997,24 @@ export function AdminBookingsPanel({
 
             {renderBookingActions(detailBooking)}
 
-            <button
-              type="button"
-              onClick={() => setDetailBooking(null)}
-              className="mt-6 w-full rounded-2xl border border-white/10 px-5 py-3 font-bold"
-            >
-              {t("admin.close")}
-            </button>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                disabled={deletingBookings}
+                onClick={() => deleteBookings([detailBooking.id])}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-red-300/30 bg-red-500/15 px-5 py-3 font-bold text-red-200 hover:bg-red-500/25 disabled:opacity-50"
+              >
+                <Trash2 size={18} />
+                {t("admin.deleteBooking")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDetailBooking(null)}
+                className="flex-1 rounded-2xl border border-white/10 px-5 py-3 font-bold"
+              >
+                {t("admin.close")}
+              </button>
+            </div>
           </div>
         </div>
       )}

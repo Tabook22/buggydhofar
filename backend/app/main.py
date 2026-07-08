@@ -917,6 +917,57 @@ def admin_bookings_archive(_: models.Admin = Depends(auth.get_current_admin), db
     return booking_archive.build_booking_archive(db)
 
 
+def delete_booking_record(db: Session, booking_id: int) -> bool:
+    booking = db.get(models.Booking, booking_id)
+    if not booking:
+        return False
+    db.query(models.BookingEmailLog).filter(models.BookingEmailLog.booking_id == booking_id).delete(
+        synchronize_session=False
+    )
+    db.delete(booking)
+    return True
+
+
+@app.post("/api/admin/bookings/bulk-delete")
+def admin_delete_bookings_bulk(
+    payload: schemas.BookingBulkDelete,
+    _: models.Admin = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    ids = list(dict.fromkeys(payload.ids))
+    if not ids:
+        raise HTTPException(status_code=400, detail="No booking ids provided.")
+    deleted: list[int] = []
+    not_found: list[int] = []
+    for booking_id in ids:
+        if delete_booking_record(db, booking_id):
+            deleted.append(booking_id)
+        else:
+            not_found.append(booking_id)
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Could not delete bookings. Please try again.") from exc
+    return {"deleted": deleted, "not_found": not_found, "count": len(deleted)}
+
+
+@app.delete("/api/admin/bookings/{booking_id}")
+def admin_delete_booking(
+    booking_id: int,
+    _: models.Admin = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    if not delete_booking_record(db, booking_id):
+        raise HTTPException(status_code=404, detail="Booking not found")
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Could not delete booking. Please try again.") from exc
+    return {"status": "deleted", "booking_id": booking_id}
+
+
 @app.get("/api/admin/bookings/{booking_id}/waiver", response_model=schemas.BookingWaiverOut)
 def admin_booking_waiver(
     booking_id: int,
