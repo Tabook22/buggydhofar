@@ -1,5 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { LucideIcon } from "lucide-react";
+import { Bike, Building2, CalendarDays, Car, FileText, LayoutDashboard, Map } from "lucide-react";
 import { api, clearAdminToken, FleetUnit, isAdminAuthError, RouteExperience, SiteContent, Vehicle } from "../api/client";
 import { RealMapPathPicker, RealMapRoutePreview } from "../components/RealMapRoute";
 import { AdminBookingsPanel } from "../components/AdminBookingsPanel";
@@ -112,6 +114,32 @@ function nextFleetUnitNumber(units: FleetUnit[]) {
   return Math.max(...units.map((unit) => unit.unit_number)) + 1;
 }
 
+const ADMIN_TAB_STORAGE_KEY = "admin_active_tab";
+
+const ADMIN_TABS = [
+  { id: "overview", labelKey: "admin.tabOverview", icon: LayoutDashboard },
+  { id: "bookings", labelKey: "admin.bookings", icon: CalendarDays },
+  { id: "transfer", labelKey: "admin.tabTransfer", icon: Building2 },
+  { id: "content", labelKey: "admin.tabContent", icon: FileText },
+  { id: "fleet", labelKey: "admin.tabFleet", icon: Bike },
+  { id: "paths", labelKey: "admin.tabPaths", icon: Map },
+  { id: "vehicles", labelKey: "admin.vehicles", icon: Car }
+] as const satisfies ReadonlyArray<{ id: string; labelKey: string; icon: LucideIcon }>;
+
+type AdminTabId = (typeof ADMIN_TABS)[number]["id"];
+
+function readStoredAdminTab(): AdminTabId {
+  try {
+    const saved = localStorage.getItem(ADMIN_TAB_STORAGE_KEY);
+    if (saved && ADMIN_TABS.some((tab) => tab.id === saved)) {
+      return saved as AdminTabId;
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  return "overview";
+}
+
 const emptySiteContent: SiteContentForm = {
   hero_badge_en: "",
   hero_badge_ar: "",
@@ -166,6 +194,16 @@ export default function AdminDashboard() {
   const [siteContentForm, setSiteContentForm] = useState<SiteContentForm>(emptySiteContent);
   const [transferMessage, setTransferMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [fleetMessage, setFleetMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<AdminTabId>(readStoredAdminTab);
+
+  function selectTab(tabId: AdminTabId) {
+    setActiveTab(tabId);
+    try {
+      localStorage.setItem(ADMIN_TAB_STORAGE_KEY, tabId);
+    } catch {
+      // Ignore storage errors
+    }
+  }
 
   function handleAuthFailure(message?: string) {
     clearAdminToken();
@@ -488,7 +526,7 @@ export default function AdminDashboard() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-4xl font-black">{t("admin.dashboard")}</h1>
-            <p className="mt-2 text-white/60">Control bookings, vehicles, offers, prices, route paths, and map locations.</p>
+            <p className="mt-2 text-white/60">{t("admin.dashboardSubtitle")}</p>
           </div>
           <button
             onClick={() => {
@@ -498,11 +536,33 @@ export default function AdminDashboard() {
             }}
             className="rounded-full border border-white/10 px-5 py-2"
           >
-            Logout
+            {t("admin.logout")}
           </button>
         </div>
 
-        <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <nav className="mt-6 -mx-4 overflow-x-auto px-4 lg:mx-0 lg:px-0" aria-label={t("admin.dashboard")}>
+          <div className="flex min-w-max gap-1.5 rounded-2xl border border-white/10 bg-black/25 p-1.5">
+            {ADMIN_TABS.map(({ id, labelKey, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => selectTab(id)}
+                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-bold transition sm:px-4 ${
+                  activeTab === id
+                    ? "bg-forest-500/25 text-forest-100 shadow-sm"
+                    : "text-white/60 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icon size={16} className="shrink-0" />
+                {t(labelKey)}
+              </button>
+            ))}
+          </div>
+        </nav>
+
+        {activeTab === "overview" && (
+        <>
+        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[
             {
               label: t("admin.revenue"),
@@ -544,12 +604,20 @@ export default function AdminDashboard() {
             </div>
           ))}
         </section>
+        </>
+        )}
 
-        <AdminBookingLinkQr />
+        {activeTab === "bookings" && (
+        <div className="mt-6 space-y-6">
+        <AdminBookingLinkQr embedded />
+        <AdminBookingsPanel token={token} onAuthFailure={handleAuthFailure} embedded />
+        </div>
+        )}
 
-        <AdminBookingsPanel token={token} onAuthFailure={handleAuthFailure} />
-
+        {activeTab === "transfer" && (
+        <div className="mt-6">
         <AdminTransferSettings
+          embedded
           form={siteContentForm}
           message={transferMessage}
           onChange={(transfer) => setSiteContentForm((prev) => ({ ...prev, ...transfer }))}
@@ -574,8 +642,11 @@ export default function AdminDashboard() {
             }
           }}
         />
+        </div>
+        )}
 
-        <section className="mt-8 rounded-[2rem] bg-white/5 p-6">
+        {activeTab === "content" && (
+        <section className="mt-6 rounded-[2rem] bg-white/5 p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h2 className="text-2xl font-black">Main Page Content & Images</h2>
@@ -620,8 +691,10 @@ export default function AdminDashboard() {
             <button className="w-fit rounded-2xl bg-forest-500 px-6 py-3 font-bold text-white">Save Main Page Content</button>
           </form>
         </section>
+        )}
 
-        <section className="mt-8 rounded-[2rem] bg-white/5 p-6">
+        {activeTab === "fleet" && (
+        <section className="mt-6 rounded-[2rem] bg-white/5 p-6">
           <h2 className="text-2xl font-black">{t("admin.fleetTitle")}</h2>
           <p className="mt-2 text-sm text-white/60">{t("admin.fleetSubtitle")}</p>
           {fleetMessage && (
@@ -662,8 +735,10 @@ export default function AdminDashboard() {
           </div>
           <p className="mt-4 text-sm font-bold text-forest-300">{t("admin.fleetCount", { count: fleetUnits.filter((unit) => unit.is_active).length })}</p>
         </section>
+        )}
 
-        <section className="mt-8 rounded-[2rem] bg-white/5 p-6">
+        {activeTab === "paths" && (
+        <section className="mt-6 rounded-[2rem] bg-white/5 p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h2 className="text-2xl font-black">{t("admin.pathsTitle")}</h2>
@@ -870,8 +945,10 @@ export default function AdminDashboard() {
             </div>
           )}
         </section>
+        )}
 
-        <section className="mt-8 rounded-[2rem] bg-white/5 p-6">
+        {activeTab === "vehicles" && (
+        <section className="mt-6 rounded-[2rem] bg-white/5 p-6">
           <h2 className="text-2xl font-black">{editingVehicleId ? "Edit Vehicle" : t("admin.addVehicle")}</h2>
             <form onSubmit={saveVehicle} className="mt-5 grid gap-3">
               <input className={inputClass} placeholder="Name EN" value={vehicleForm.name_en} onChange={(event) => setVehicleForm({ ...vehicleForm, name_en: event.target.value })} />
@@ -916,6 +993,7 @@ export default function AdminDashboard() {
               ))}
             </div>
         </section>
+        )}
       </div>
     </main>
   );

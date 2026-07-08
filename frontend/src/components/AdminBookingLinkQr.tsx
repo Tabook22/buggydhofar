@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Copy, Download, ExternalLink } from "lucide-react";
 import { buildPublicBookingUrl, qrCodeImageUrl } from "../lib/bookingQr";
 
-export function AdminBookingLinkQr() {
+export function AdminBookingLinkQr({ embedded = false }: { embedded?: boolean }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const bookingUrl = useMemo(() => buildPublicBookingUrl(), []);
@@ -21,7 +21,7 @@ export function AdminBookingLinkQr() {
   }
 
   return (
-    <section className="mt-8 rounded-[2rem] bg-white/5 p-6">
+    <section className={`${embedded ? "" : "mt-8"} rounded-[2rem] bg-white/5 p-6`}>
       <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
         <div>
           <h2 className="text-2xl font-black">{t("admin.bookingQrTitle")}</h2>

@@ -67,12 +67,14 @@ export function AdminTransferSettings({
   form,
   onChange,
   onSave,
-  message
+  message,
+  embedded = false
 }: {
   form: TransferSettingsForm;
   onChange: (next: TransferSettingsForm) => void;
   onSave: (event: FormEvent, form: TransferSettingsForm) => Promise<void>;
   message?: { type: "success" | "error"; text: string } | null;
+  embedded?: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -105,7 +107,7 @@ export function AdminTransferSettings({
   const mobileSectionOn = form.transfer_show_mobile_number;
 
   return (
-    <section className="mt-8 rounded-[2rem] bg-white/5 p-6">
+    <section className={`${embedded ? "" : "mt-8"} rounded-[2rem] bg-white/5 p-6`}>
       <div>
         <h2 className="text-2xl font-black">{t("admin.transferSettingsTitle")}</h2>
         <p className="mt-2 text-sm text-white/60">{t("admin.transferSettingsHelp")}</p>

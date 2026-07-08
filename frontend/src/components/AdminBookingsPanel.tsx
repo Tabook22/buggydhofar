@@ -111,10 +111,12 @@ function archiveQuery(year: number | null, month: number | null, day: number | n
 
 export function AdminBookingsPanel({
   token,
-  onAuthFailure
+  onAuthFailure,
+  embedded = false
 }: {
   token: string;
   onAuthFailure: (message?: string) => void;
+  embedded?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const [archive, setArchive] = useState<BookingArchive | null>(null);
@@ -438,7 +440,7 @@ export function AdminBookingsPanel({
   );
 
   return (
-    <section className="mt-8 rounded-[2rem] bg-white/5 p-6">
+    <section className={`${embedded ? "" : "mt-8"} rounded-[2rem] bg-white/5 p-6`}>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black">{t("admin.bookingsArchive")}</h2>
