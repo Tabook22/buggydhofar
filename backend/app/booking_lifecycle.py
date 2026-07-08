@@ -71,7 +71,10 @@ def expire_stale_pending_bookings(db: Session) -> list[models.Booking]:
     if not stale:
         return []
 
+    from . import promo_codes
+
     for booking in stale:
+        promo_codes.release_promo_usage(db, booking)
         booking.booking_status = "cancelled"
         booking.payment_status = "cancelled"
 

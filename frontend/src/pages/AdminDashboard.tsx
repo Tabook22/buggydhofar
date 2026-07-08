@@ -1,12 +1,13 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { LucideIcon } from "lucide-react";
-import { Bike, Building2, CalendarDays, Car, FileText, LayoutDashboard, Map } from "lucide-react";
+import { Bike, Building2, CalendarDays, Car, FileText, LayoutDashboard, Map, Tag } from "lucide-react";
 import { api, clearAdminToken, FleetUnit, isAdminAuthError, RouteExperience, SiteContent, Vehicle } from "../api/client";
 import { RealMapPathPicker, RealMapRoutePreview } from "../components/RealMapRoute";
 import { AdminBookingsPanel } from "../components/AdminBookingsPanel";
 import { AdminBookingLinkQr } from "../components/AdminBookingLinkQr";
 import { AdminMediaField } from "../components/AdminMediaField";
+import { AdminPromoCodes } from "../components/AdminPromoCodes";
 import { AdminTransferSettings, defaultTransferSettings } from "../components/AdminTransferSettings";
 
 type Stats = {
@@ -120,6 +121,7 @@ const ADMIN_TAB_STORAGE_KEY = "admin_active_tab";
 const ADMIN_TABS = [
   { id: "overview", labelKey: "admin.tabOverview", icon: LayoutDashboard },
   { id: "bookings", labelKey: "admin.bookings", icon: CalendarDays },
+  { id: "promo", labelKey: "admin.tabPromo", icon: Tag },
   { id: "transfer", labelKey: "admin.tabTransfer", icon: Building2 },
   { id: "content", labelKey: "admin.tabContent", icon: FileText },
   { id: "fleet", labelKey: "admin.tabFleet", icon: Bike },
@@ -613,6 +615,12 @@ export default function AdminDashboard() {
         <div className="mt-6 space-y-6">
         <AdminBookingLinkQr embedded />
         <AdminBookingsPanel token={token} onAuthFailure={handleAuthFailure} embedded />
+        </div>
+        )}
+
+        {activeTab === "promo" && (
+        <div className="mt-6">
+        <AdminPromoCodes token={token} onAuthFailure={handleAuthFailure} embedded />
         </div>
         )}
 

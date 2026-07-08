@@ -93,6 +93,9 @@ class Booking(Base):
     passengers: Mapped[int] = mapped_column(Integer)
     subtotal: Mapped[float | None] = mapped_column(Float, nullable=True)
     tax_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    discount_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    promo_code_id: Mapped[int | None] = mapped_column(ForeignKey("promo_codes.id"), nullable=True, index=True)
+    promo_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     total_price: Mapped[float] = mapped_column(Float)
     payment_method: Mapped[str] = mapped_column(String(40))
     payment_status: Mapped[str] = mapped_column(String(40), default="pending")
@@ -114,6 +117,19 @@ class Booking(Base):
     fleet_unit: Mapped["FleetUnit | None"] = relationship(back_populates="bookings")
     bikes: Mapped[list["BookingBike"]] = relationship(back_populates="booking", cascade="all, delete-orphan")
     email_logs: Mapped[list["BookingEmailLog"]] = relationship(back_populates="booking")
+
+
+class PromoCode(Base):
+    __tablename__ = "promo_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    discount_type: Mapped[str] = mapped_column(String(16))
+    discount_value: Mapped[float] = mapped_column(Float)
+    max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class BookingBike(Base):

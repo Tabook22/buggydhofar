@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import extract, func, text
 from sqlalchemy.orm import Session
 
-from . import auth, amwal, booking_archive, booking_lifecycle, booking_numbers, booking_qr, email_service, fleet, media_storage, models, pricing, routes_geo, schemas, waiver
+from . import auth, amwal, booking_archive, booking_lifecycle, booking_numbers, booking_qr, email_service, fleet, media_storage, models, pricing, promo_codes, routes_geo, schemas, waiver
 from .database import Base, SessionLocal, engine, get_db
 from .seed import seed_database, seed_payment_transfer_defaults
 
@@ -161,6 +161,19 @@ def ensure_booking_tax_columns() -> None:
             connection.execute(text("ALTER TABLE bookings ADD COLUMN tax_amount REAL"))
 
 
+def ensure_booking_promo_columns() -> None:
+    with engine.begin() as connection:
+        existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(bookings)"))}
+        columns = {
+            "discount_amount": "REAL",
+            "promo_code_id": "INTEGER",
+            "promo_code": "TEXT",
+        }
+        for column, definition in columns.items():
+            if column not in existing_columns:
+                connection.execute(text(f"ALTER TABLE bookings ADD COLUMN {column} {definition}"))
+
+
 def ensure_booking_waiver_columns() -> None:
     with engine.begin() as connection:
         existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(bookings)"))}
@@ -272,6 +285,8 @@ def booking_to_out(booking: models.Booking, db: Session) -> schemas.BookingOut:
         passengers=booking.passengers,
         subtotal=booking.subtotal,
         tax_amount=booking.tax_amount,
+        discount_amount=getattr(booking, "discount_amount", None),
+        promo_code=getattr(booking, "promo_code", None),
         total_price=booking.total_price,
         payment_method=booking.payment_method,
         payment_status=booking.payment_status,
@@ -320,6 +335,7 @@ def startup() -> None:
     ensure_booking_mode_column()
     ensure_booking_group_type_column()
     ensure_booking_tax_columns()
+    ensure_booking_promo_columns()
     ensure_booking_waiver_columns()
     ensure_booking_check_in_columns()
     ensure_admin_role_column()
@@ -511,8 +527,21 @@ def create_booking(payload: schemas.BookingCreate, background_tasks: BackgroundT
         raise HTTPException(status_code=400, detail="National / resident ID is required for the liability waiver.")
 
     subtotal = fleet.server_booking_price(payload.passengers, booking_mode)
-    tax_amount = pricing.calculate_tax(subtotal)
-    expected_price = pricing.calculate_total_with_tax(subtotal)
+    promo_record = None
+    discount_amount = 0.0
+    promo_code_text = None
+    if payload.promo_code and payload.promo_code.strip():
+        promo_record, subtotal, discount_amount, tax_amount, expected_price = promo_codes.validate_promo_for_booking(
+            db,
+            payload.promo_code,
+            subtotal,
+            consume=False,
+        )
+        promo_code_text = promo_record.code
+    else:
+        tax_amount = pricing.calculate_tax(subtotal)
+        expected_price = pricing.calculate_total_with_tax(subtotal)
+
     if abs(payload.total_price - expected_price) > 0.01:
         raise HTTPException(
             status_code=400,
@@ -560,6 +589,9 @@ def create_booking(payload: schemas.BookingCreate, background_tasks: BackgroundT
         group_type=group_type,
         subtotal=subtotal,
         tax_amount=tax_amount,
+        discount_amount=discount_amount or None,
+        promo_code_id=promo_record.id if promo_record else None,
+        promo_code=promo_code_text,
         total_price=expected_price,
         payment_method=payload.payment_method,
         notes=payload.notes,
@@ -574,6 +606,8 @@ def create_booking(payload: schemas.BookingCreate, background_tasks: BackgroundT
     )
     db.add(booking)
     db.flush()
+    if promo_record:
+        promo_record.used_count += 1
     fleet.create_booking_bikes(db, booking, payload.fleet_unit_ids)
     db.commit()
     db.refresh(booking)
@@ -898,6 +932,150 @@ def staff_check_in_booking(
     return perform_booking_check_in(token, db)
 
 
+@app.post("/api/promo-codes/validate", response_model=schemas.PromoValidateOut)
+def validate_promo_code(payload: schemas.PromoValidateRequest, db: Session = Depends(get_db)):
+    if payload.passengers < 1:
+        raise HTTPException(status_code=400, detail="At least one passenger is required.")
+    booking_mode = pricing.normalize_booking_mode(payload.booking_mode)
+    subtotal = fleet.server_booking_price(payload.passengers, booking_mode)
+    try:
+        promo, _, discount_amount, tax_amount, total_price = promo_codes.validate_promo_for_booking(
+            db,
+            payload.code,
+            subtotal,
+            consume=False,
+        )
+    except HTTPException as exc:
+        return schemas.PromoValidateOut(
+            valid=False,
+            code=promo_codes.normalize_code(payload.code),
+            discount_type="fixed",
+            discount_value=0,
+            subtotal=subtotal,
+            discount_amount=0,
+            tax_amount=pricing.calculate_tax(subtotal),
+            total_price=pricing.calculate_total_with_tax(subtotal),
+            message=str(exc.detail),
+        )
+    return schemas.PromoValidateOut(
+        valid=True,
+        code=promo.code,
+        discount_type=promo.discount_type,
+        discount_value=promo.discount_value,
+        subtotal=subtotal,
+        discount_amount=discount_amount,
+        tax_amount=tax_amount,
+        total_price=total_price,
+    )
+
+
+@app.get("/api/admin/promo-codes", response_model=list[schemas.PromoCodeOut])
+def admin_list_promo_codes(_: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+    return db.query(models.PromoCode).order_by(models.PromoCode.created_at.desc()).all()
+
+
+@app.post("/api/admin/promo-codes", response_model=schemas.PromoCodeOut)
+def admin_create_promo_code(
+    payload: schemas.PromoCodeCreate,
+    _: models.Admin = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        code = promo_codes.validate_code_format(payload.code)
+        discount_type = promo_codes.normalize_discount_type(payload.discount_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if discount_type == promo_codes.DISCOUNT_TYPE_PERCENT:
+        if payload.discount_value <= 0 or payload.discount_value > 100:
+            raise HTTPException(status_code=400, detail="Percent discount must be between 1 and 100.")
+    elif payload.discount_value <= 0:
+        raise HTTPException(status_code=400, detail="Fixed discount must be greater than zero.")
+
+    max_uses = payload.max_uses
+    if max_uses is not None and max_uses < 1:
+        raise HTTPException(status_code=400, detail="Max uses must be at least 1, or leave empty for unlimited.")
+
+    if db.query(models.PromoCode).filter(models.PromoCode.code == code).first():
+        raise HTTPException(status_code=409, detail="This promo code already exists.")
+
+    promo = models.PromoCode(
+        code=code,
+        discount_type=discount_type,
+        discount_value=float(payload.discount_value),
+        max_uses=max_uses,
+        is_active=payload.is_active,
+    )
+    db.add(promo)
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Could not save promo code.") from exc
+    db.refresh(promo)
+    return promo
+
+
+@app.patch("/api/admin/promo-codes/{promo_id}", response_model=schemas.PromoCodeOut)
+def admin_update_promo_code(
+    promo_id: int,
+    payload: schemas.PromoCodeUpdate,
+    _: models.Admin = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    promo = db.get(models.PromoCode, promo_id)
+    if not promo:
+        raise HTTPException(status_code=404, detail="Promo code not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    if "discount_type" in data and data["discount_type"] is not None:
+        try:
+            data["discount_type"] = promo_codes.normalize_discount_type(data["discount_type"])
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    discount_type = data.get("discount_type", promo.discount_type)
+    discount_value = data.get("discount_value", promo.discount_value)
+    if discount_type == promo_codes.DISCOUNT_TYPE_PERCENT:
+        if discount_value <= 0 or discount_value > 100:
+            raise HTTPException(status_code=400, detail="Percent discount must be between 1 and 100.")
+    elif discount_value <= 0:
+        raise HTTPException(status_code=400, detail="Fixed discount must be greater than zero.")
+
+    if "max_uses" in data and data["max_uses"] is not None and data["max_uses"] < 1:
+        raise HTTPException(status_code=400, detail="Max uses must be at least 1, or leave empty for unlimited.")
+    if "max_uses" in data and data["max_uses"] is not None and data["max_uses"] < promo.used_count:
+        raise HTTPException(status_code=400, detail="Max uses cannot be less than times already used.")
+
+    for key, value in data.items():
+        setattr(promo, key, value)
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Could not update promo code.") from exc
+    db.refresh(promo)
+    return promo
+
+
+@app.delete("/api/admin/promo-codes/{promo_id}")
+def admin_delete_promo_code(
+    promo_id: int,
+    _: models.Admin = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    promo = db.get(models.PromoCode, promo_id)
+    if not promo:
+        raise HTTPException(status_code=404, detail="Promo code not found")
+    db.delete(promo)
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Could not delete promo code.") from exc
+    return {"status": "deleted", "promo_id": promo_id}
+
+
 @app.get("/api/admin/bookings", response_model=list[schemas.BookingAdminOut])
 def admin_bookings(
     year: int | None = None,
@@ -921,6 +1099,7 @@ def delete_booking_record(db: Session, booking_id: int) -> bool:
     booking = db.get(models.Booking, booking_id)
     if not booking:
         return False
+    promo_codes.release_promo_usage(db, booking)
     db.query(models.BookingEmailLog).filter(models.BookingEmailLog.booking_id == booking_id).delete(
         synchronize_session=False
     )

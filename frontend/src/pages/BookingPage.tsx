@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { CheckCircle2 } from "lucide-react";
-import { api, BookingPayload, BookingResult, RouteExperience, Vehicle } from "../api/client";
+import { api, BookingPayload, BookingResult, PromoValidateResult, RouteExperience, Vehicle } from "../api/client";
 import { BookingConfirmationCard } from "../components/BookingConfirmationCard";
 import { BookingSelection, BookingSummaryCard, BookingWidget, calculateTotal } from "../components/Booking";
 import { LiabilityWaiver } from "../components/LiabilityWaiver";
@@ -46,6 +46,10 @@ export default function BookingPage() {
   const [payingOnline, setPayingOnline] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [pendingVisaBooking, setPendingVisaBooking] = useState<BookingResult | null>(() => loadPendingVisaBooking());
+  const [promoInput, setPromoInput] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<PromoValidateResult | null>(null);
+  const [promoError, setPromoError] = useState("");
+  const [promoApplying, setPromoApplying] = useState(false);
 
   useEffect(() => {
     const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
@@ -87,6 +91,8 @@ export default function BookingPage() {
 
   useEffect(() => {
     saveBookingDraft(selection);
+    setAppliedPromo(null);
+    setPromoError("");
   }, [selection]);
 
   useEffect(() => {
@@ -159,6 +165,46 @@ export default function BookingPage() {
     }
   }
 
+  async function applyPromoCode() {
+    const code = promoInput.trim();
+    if (!code) {
+      setAppliedPromo(null);
+      setPromoError("");
+      return;
+    }
+    if (!isBookingSelectionReady(selection)) {
+      setPromoError(t("booking.unavailable"));
+      return;
+    }
+    setPromoApplying(true);
+    setPromoError("");
+    try {
+      const result = await api.validatePromoCode({
+        code,
+        passengers: selection.passengers,
+        booking_mode: selection.bookingMode
+      });
+      if (!result.valid) {
+        setAppliedPromo(null);
+        setPromoError(result.message || t("booking.promoInvalid"));
+        return;
+      }
+      setAppliedPromo(result);
+      setPromoInput(result.code);
+    } catch (error) {
+      setAppliedPromo(null);
+      setPromoError(error instanceof Error ? error.message : t("booking.promoInvalid"));
+    } finally {
+      setPromoApplying(false);
+    }
+  }
+
+  function clearPromoCode() {
+    setPromoInput("");
+    setAppliedPromo(null);
+    setPromoError("");
+  }
+
   function buildBookingPayload(): BookingPayload {
     return {
       customer_name: form.customer_name.trim(),
@@ -176,7 +222,8 @@ export default function BookingPage() {
       passengers: selection.passengers,
       booking_mode: selection.bookingMode,
       group_type: selection.bookingMode === "group" ? selection.groupType || null : null,
-      total_price: calculateTotal(selection),
+      total_price: appliedPromo?.valid ? appliedPromo.total_price : calculateTotal(selection),
+      promo_code: appliedPromo?.valid ? appliedPromo.code : undefined,
       payment_method: ONLINE_PAYMENT_METHOD,
       waiver_accepted: true,
       waiver_language: i18n.language.startsWith("ar") ? "ar" : "en"
@@ -281,6 +328,43 @@ export default function BookingPage() {
                       <textarea className={inputClass} rows={4} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder={t("booking.noticeOptional")} />
                     </label>
                   </div>
+                  <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <h3 className="text-lg font-bold">{t("booking.promoTitle")}</h3>
+                    <p className="mt-1 text-sm text-white/55">{t("booking.promoHint")}</p>
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                      <input
+                        type="text"
+                        className={inputClass}
+                        value={promoInput}
+                        onChange={(event) => setPromoInput(event.target.value.toUpperCase())}
+                        placeholder={t("booking.promoPlaceholder")}
+                        aria-label={t("booking.promoTitle")}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={promoApplying || !promoInput.trim()}
+                          onClick={applyPromoCode}
+                          className="rounded-2xl bg-forest-500/20 px-5 py-3 text-sm font-bold text-forest-200 hover:bg-forest-500/30 disabled:opacity-50"
+                        >
+                          {promoApplying ? t("booking.promoApplying") : t("booking.promoApply")}
+                        </button>
+                        {appliedPromo?.valid && (
+                          <button
+                            type="button"
+                            onClick={clearPromoCode}
+                            className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-bold"
+                          >
+                            {t("booking.promoRemove")}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {appliedPromo?.valid && (
+                      <p className="mt-3 text-sm font-semibold text-forest-300">{t("booking.promoApplied", { code: appliedPromo.code })}</p>
+                    )}
+                    {promoError && <p className="mt-3 text-sm text-red-300">{promoError}</p>}
+                  </div>
                   <LiabilityWaiver
                     customerName={form.customer_name}
                     nationalId={form.national_id}
@@ -313,7 +397,23 @@ export default function BookingPage() {
                   </button>
                 </form>
               </div>
-              <BookingSummaryCard vehicles={vehicles} routes={routes} selection={selection} showButton={false} />
+              <BookingSummaryCard
+                vehicles={vehicles}
+                routes={routes}
+                selection={selection}
+                showButton={false}
+                appliedPromo={
+                  appliedPromo?.valid
+                    ? {
+                        code: appliedPromo.code,
+                        subtotal: appliedPromo.subtotal,
+                        discount_amount: appliedPromo.discount_amount,
+                        tax: appliedPromo.tax_amount,
+                        total: appliedPromo.total_price
+                      }
+                    : null
+                }
+              />
             </div>
           )}
         </div>

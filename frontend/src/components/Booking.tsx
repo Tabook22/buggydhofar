@@ -69,23 +69,39 @@ function syncFleetSelection(
   return next;
 }
 
+export type AppliedPromo = {
+  code: string;
+  subtotal: number;
+  discount_amount: number;
+  tax: number;
+  total: number;
+};
+
 export function BookingSummaryCard({
   selection,
   vehicles,
   routes,
-  showButton = true
+  showButton = true,
+  appliedPromo = null
 }: {
   selection: BookingSelection;
   vehicles: Vehicle[];
   routes: RouteExperience[];
   showButton?: boolean;
+  appliedPromo?: AppliedPromo | null;
 }) {
   const { t, i18n } = useTranslation();
   const [fleetUnits, setFleetUnits] = useState<FleetUnitAvailability[]>([]);
   const vehicle = vehicles.find((item) => item.id === selection.vehicleId);
   const route = routes.find((item) => item.id === selection.routeId);
   const prices = bookingPriceSummary(selection);
-  const total = selection.fleetUnitIds.length ? prices.total : 0;
+  const summary = appliedPromo ?? {
+    subtotal: prices.subtotal,
+    discount_amount: 0,
+    tax: prices.tax,
+    total: prices.total
+  };
+  const total = selection.fleetUnitIds.length ? summary.total : 0;
   const bikesNeeded = bikesRequiredForPassengers(selection.passengers, selection.bookingMode);
   const selectedUnits = fleetUnits.filter((unit) => selection.fleetUnitIds.includes(unit.id));
 
@@ -154,13 +170,23 @@ export function BookingSummaryCard({
             <div className="flex justify-between gap-4 border-b border-white/10 pb-3 text-sm">
               <dt className="text-white/60">{t("booking.subtotal")}</dt>
               <dd className="font-semibold">
-                {prices.subtotal.toFixed(2)} {t("booking.omr")}
+                {summary.subtotal.toFixed(2)} {t("booking.omr")}
               </dd>
             </div>
+            {appliedPromo && appliedPromo.discount_amount > 0 && (
+              <div className="flex justify-between gap-4 border-b border-white/10 pb-3 text-sm text-forest-300">
+                <dt>
+                  {t("booking.promoDiscount")} ({appliedPromo.code})
+                </dt>
+                <dd className="font-semibold">
+                  -{appliedPromo.discount_amount.toFixed(2)} {t("booking.omr")}
+                </dd>
+              </div>
+            )}
             <div className="flex justify-between gap-4 border-b border-white/10 pb-3 text-sm">
               <dt className="text-white/60">{t("booking.tax", { percent: TAX_PERCENT })}</dt>
               <dd className="font-semibold">
-                {prices.tax.toFixed(2)} {t("booking.omr")}
+                {summary.tax.toFixed(2)} {t("booking.omr")}
               </dd>
             </div>
           </>

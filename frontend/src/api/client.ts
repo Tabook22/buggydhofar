@@ -86,6 +86,36 @@ export type BookingPayload = {
   waiver_accepted: boolean;
   waiver_language: string;
   notes?: string;
+  promo_code?: string;
+};
+
+export type PromoCode = {
+  id: number;
+  code: string;
+  discount_type: "fixed" | "percent";
+  discount_value: number;
+  max_uses: number | null;
+  used_count: number;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type PromoValidatePayload = {
+  code: string;
+  passengers: number;
+  booking_mode: BookingMode;
+};
+
+export type PromoValidateResult = {
+  valid: boolean;
+  code: string;
+  discount_type: "fixed" | "percent";
+  discount_value: number;
+  subtotal: number;
+  discount_amount: number;
+  tax_amount: number;
+  total_price: number;
+  message?: string | null;
 };
 
 export type AmwalSmartBoxConfig = {
@@ -163,6 +193,8 @@ export type BookingResult = {
   group_type?: string | null;
   subtotal: number | null;
   tax_amount: number | null;
+  discount_amount?: number | null;
+  promo_code?: string | null;
   total_price: number;
   payment_method: string;
   payment_status: string;
@@ -465,6 +497,11 @@ export const api = {
     request<{ available: boolean; available_count: number; total_bikes: number; message: string }>(`/api/availability?${params.toString()}`),
   createBooking: (payload: BookingPayload) =>
     request<BookingResult>("/api/bookings", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  validatePromoCode: (payload: PromoValidatePayload) =>
+    request<PromoValidateResult>("/api/promo-codes/validate", {
       method: "POST",
       body: JSON.stringify(payload)
     }),

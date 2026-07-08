@@ -118,6 +118,7 @@ class BookingCreate(BaseModel):
     waiver_accepted: bool
     waiver_language: str = "ar"
     notes: str | None = None
+    promo_code: str | None = None
 
 
 class BookingOut(BaseModel):
@@ -140,6 +141,8 @@ class BookingOut(BaseModel):
     passengers: int
     subtotal: float | None = None
     tax_amount: float | None = None
+    discount_amount: float | None = None
+    promo_code: str | None = None
     total_price: float
     payment_method: str
     payment_status: str
@@ -253,6 +256,57 @@ class BookingStatusUpdate(BaseModel):
 
 class BookingBulkDelete(BaseModel):
     ids: list[int]
+
+
+class PromoCodeBase(BaseModel):
+    code: str
+    discount_type: str
+    discount_value: float
+    max_uses: int | None = None
+    is_active: bool = True
+
+
+class PromoCodeCreate(PromoCodeBase):
+    pass
+
+
+class PromoCodeUpdate(BaseModel):
+    discount_type: str | None = None
+    discount_value: float | None = None
+    max_uses: int | None = None
+    is_active: bool | None = None
+
+
+class PromoCodeOut(BaseModel):
+    id: int
+    code: str
+    discount_type: str
+    discount_value: float
+    max_uses: int | None
+    used_count: int
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PromoValidateRequest(BaseModel):
+    code: str
+    passengers: int
+    booking_mode: str = "group"
+
+
+class PromoValidateOut(BaseModel):
+    valid: bool
+    code: str
+    discount_type: str
+    discount_value: float
+    subtotal: float
+    discount_amount: float
+    tax_amount: float
+    total_price: float
+    message: str | None = None
 
 
 class LoginRequest(BaseModel):
