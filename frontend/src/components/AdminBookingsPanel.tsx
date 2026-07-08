@@ -1,7 +1,9 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { ChevronDown, ChevronUp, LayoutGrid, List, Search } from "lucide-react";
 import { api, groupTypeLabel, isAdminAuthError, normalizeGroupType } from "../api/client";
+import { qrCodeImageUrl } from "../lib/bookingQr";
 import { BookingQrCode } from "./BookingQrCode";
 
 export type AdminBooking = {
@@ -62,6 +64,40 @@ type BookingWaiver = {
 };
 
 const inputClass = "w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-white outline-none focus:border-forest-400";
+const VIEW_STORAGE_KEY = "admin_bookings_view";
+
+type ViewMode = "cards" | "list";
+
+function defaultViewMode(): ViewMode {
+  try {
+    const saved = localStorage.getItem(VIEW_STORAGE_KEY);
+    if (saved === "cards" || saved === "list") return saved;
+  } catch {
+    // Ignore storage errors
+  }
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches ? "cards" : "list";
+}
+
+function displayStatus(status: string) {
+  if (status === "confirmed" || status === "completed") return "pending";
+  return status;
+}
+
+function filterBookings(bookings: AdminBooking[], query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return bookings;
+  const digits = q.replace(/\D/g, "");
+  return bookings.filter((booking) => {
+    const phoneDigits = booking.phone.replace(/\D/g, "");
+    return (
+      booking.booking_number.toLowerCase().includes(q) ||
+      booking.customer_name.toLowerCase().includes(q) ||
+      booking.email.toLowerCase().includes(q) ||
+      booking.phone.toLowerCase().includes(q) ||
+      (digits.length > 0 && phoneDigits.includes(digits))
+    );
+  });
+}
 
 function archiveQuery(year: number | null, month: number | null, day: number | null) {
   const params = new URLSearchParams();
@@ -96,6 +132,10 @@ export function AdminBookingsPanel({
   const [waiverData, setWaiverData] = useState<BookingWaiver | null>(null);
   const [waiverLoading, setWaiverLoading] = useState(false);
   const [qrBooking, setQrBooking] = useState<AdminBooking | null>(null);
+  const [detailBooking, setDetailBooking] = useState<AdminBooking | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>(defaultViewMode);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
 
   const loadBookings = useCallback(
     async (year: number | null, month: number | null, day: number | null) => {
@@ -128,6 +168,13 @@ export function AdminBookingsPanel({
   useEffect(() => {
     loadBookings(selectedYear, selectedMonth, selectedDay);
   }, [loadBookings, selectedYear, selectedMonth, selectedDay]);
+
+  useEffect(() => {
+    setDetailBooking((current) => {
+      if (!current) return null;
+      return bookings.find((booking) => booking.id === current.id) ?? current;
+    });
+  }, [bookings]);
 
   async function updateStatus(id: number, booking_status: string) {
     try {
@@ -188,12 +235,180 @@ export function AdminBookingsPanel({
   }
 
   const statuses = ["pending", "paid", "cancelled"];
-
-  function displayStatus(status: string) {
-    if (status === "confirmed" || status === "completed") return "pending";
-    return status;
-  }
+  const filteredBookings = useMemo(() => filterBookings(bookings, searchQuery), [bookings, searchQuery]);
   const selectedMonthData = archive?.years.find((y) => y.year === selectedYear)?.months.find((m) => m.month === selectedMonth);
+
+  function changeViewMode(mode: ViewMode) {
+    setViewMode(mode);
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, mode);
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  function confirmationBadge(booking: AdminBooking) {
+    const isCancelled = booking.booking_status === "cancelled";
+    return (
+      <span
+        className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ${
+          isCancelled
+            ? "bg-red-500/20 text-red-300"
+            : booking.booking_confirmed
+              ? "bg-forest-500/20 text-forest-200"
+              : "bg-yellow-500/15 text-yellow-100"
+        }`}
+      >
+        {isCancelled
+          ? t("admin.confirmationUncomplete")
+          : booking.booking_confirmed
+            ? t("admin.confirmationComplete")
+            : t("admin.emailPending")}
+      </span>
+    );
+  }
+
+  function statusBadge(booking: AdminBooking) {
+    const status = displayStatus(booking.booking_status);
+    const tone =
+      status === "paid"
+        ? "bg-forest-500/20 text-forest-200"
+        : status === "cancelled"
+          ? "bg-red-500/20 text-red-300"
+          : "bg-yellow-500/15 text-yellow-100";
+    return (
+      <span className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ${tone}`}>{t(`admin.${status}`)}</span>
+    );
+  }
+
+  function renderPassengerMeta(booking: AdminBooking) {
+    if (booking.booking_mode === "individual") {
+      return <span className="block text-xs text-forest-300">{t("booking.modeIndividual")}</span>;
+    }
+    return (
+      <>
+        {normalizeGroupType(booking.group_type) ? (
+          <span className="block text-xs text-forest-300">
+            {groupTypeLabel(normalizeGroupType(booking.group_type), i18n.language)}
+          </span>
+        ) : null}
+        {booking.bike_count && booking.bike_count > 1 ? (
+          <span className="block text-xs text-white/45">{t("booking.bikesNeeded", { count: booking.bike_count })}</span>
+        ) : null}
+      </>
+    );
+  }
+
+  function renderBuggyLabel(booking: AdminBooking) {
+    const bikes =
+      (booking.fleet_unit_numbers && booking.fleet_unit_numbers.length > 0
+        ? booking.fleet_unit_numbers.map((n) => `#${n}`).join(", ")
+        : `#${booking.fleet_unit_number ?? booking.fleet_unit_id ?? "—"}`) +
+      (booking.bike_count && booking.bike_count > 1 ? ` (${booking.bike_count})` : "");
+    return booking.route_name_en ? `${bikes} · ${booking.route_name_en}` : bikes;
+  }
+
+  function renderBookingActions(booking: AdminBooking, compact = false) {
+    const isCancelled = booking.booking_status === "cancelled";
+    return (
+      <div className={`flex flex-wrap gap-2 ${compact ? "" : "mt-4"}`}>
+        {booking.waiver_accepted && (
+          <button
+            type="button"
+            onClick={() => openWaiver(booking)}
+            className="rounded-xl bg-white/10 px-3 py-1.5 text-xs font-bold text-white/85 hover:bg-white/15"
+          >
+            {t("admin.viewWaiver")}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => openReply(booking)}
+          className={`rounded-xl px-3 py-1.5 text-xs font-bold ${
+            isCancelled
+              ? "bg-red-500/15 text-red-300 hover:bg-red-500/25"
+              : "bg-forest-500/20 text-forest-200 hover:bg-forest-500/30"
+          }`}
+        >
+          {t("admin.replyEmail")}
+        </button>
+      </div>
+    );
+  }
+
+  const dateSidebar = (
+    <aside className="rounded-2xl border border-white/10 bg-black/20 p-4">
+      <p className="text-xs font-bold uppercase tracking-wide text-white/45">{t("admin.browseByDate")}</p>
+      <button
+        type="button"
+        onClick={() => {
+          setSelectedYear(null);
+          setSelectedMonth(null);
+          setSelectedDay(null);
+        }}
+        className={`mt-3 w-full rounded-xl px-3 py-2 text-start text-sm font-semibold transition ${
+          !selectedYear ? "bg-forest-500/25 text-forest-200" : "text-white/70 hover:bg-white/5"
+        }`}
+      >
+        {t("admin.allBookings")} ({archive?.total ?? 0})
+      </button>
+      <div className="mt-4 max-h-[420px] space-y-2 overflow-y-auto">
+        {(archive?.years || []).map((year) => (
+          <div key={year.year}>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedYear(year.year);
+                setSelectedMonth(null);
+                setSelectedDay(null);
+              }}
+              className={`w-full rounded-xl px-3 py-2 text-start text-sm font-bold transition ${
+                selectedYear === year.year && !selectedMonth
+                  ? "bg-forest-500/25 text-forest-200"
+                  : "text-white/80 hover:bg-white/5"
+              }`}
+            >
+              {year.year} ({year.count})
+            </button>
+            {selectedYear === year.year &&
+              year.months.map((month) => (
+                <div key={month.month} className="ms-3 mt-1 border-s border-white/10 ps-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedMonth(month.month);
+                      setSelectedDay(null);
+                    }}
+                    className={`w-full rounded-lg px-2 py-1.5 text-start text-xs font-semibold transition ${
+                      selectedMonth === month.month && !selectedDay
+                        ? "bg-forest-500/20 text-forest-200"
+                        : "text-white/65 hover:bg-white/5"
+                    }`}
+                  >
+                    {month.month_label} ({month.count})
+                  </button>
+                  {selectedMonth === month.month &&
+                    month.days.map((day) => (
+                      <button
+                        key={day.date}
+                        type="button"
+                        onClick={() => setSelectedDay(day.day)}
+                        className={`ms-2 mt-1 block w-[calc(100%-0.5rem)] rounded-lg px-2 py-1 text-start text-xs transition ${
+                          selectedDay === day.day
+                            ? "bg-forest-500/15 text-forest-200"
+                            : "text-white/55 hover:bg-white/5"
+                        }`}
+                      >
+                        {day.date} ({day.count})
+                      </button>
+                    ))}
+                </div>
+              ))}
+          </div>
+        ))}
+      </div>
+    </aside>
+  );
 
   return (
     <section className="mt-8 rounded-[2rem] bg-white/5 p-6">
@@ -216,92 +431,121 @@ export function AdminBookingsPanel({
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[280px_1fr]">
-        <aside className="rounded-2xl border border-white/10 bg-black/20 p-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-white/45">{t("admin.browseByDate")}</p>
+        <div className="xl:hidden">
           <button
             type="button"
-            onClick={() => {
-              setSelectedYear(null);
-              setSelectedMonth(null);
-              setSelectedDay(null);
-            }}
-            className={`mt-3 w-full rounded-xl px-3 py-2 text-start text-sm font-semibold transition ${
-              !selectedYear ? "bg-forest-500/25 text-forest-200" : "text-white/70 hover:bg-white/5"
-            }`}
+            onClick={() => setDateFilterOpen((open) => !open)}
+            className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-bold text-white/85"
           >
-            {t("admin.allBookings")} ({archive?.total ?? 0})
+            <span>{t("admin.filterByDate")}</span>
+            {dateFilterOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
           </button>
-          <div className="mt-4 max-h-[420px] space-y-2 overflow-y-auto">
-            {(archive?.years || []).map((year) => (
-              <div key={year.year}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedYear(year.year);
-                    setSelectedMonth(null);
-                    setSelectedDay(null);
-                  }}
-                  className={`w-full rounded-xl px-3 py-2 text-start text-sm font-bold transition ${
-                    selectedYear === year.year && !selectedMonth
-                      ? "bg-forest-500/25 text-forest-200"
-                      : "text-white/80 hover:bg-white/5"
-                  }`}
-                >
-                  {year.year} ({year.count})
-                </button>
-                {selectedYear === year.year &&
-                  year.months.map((month) => (
-                    <div key={month.month} className="ms-3 mt-1 border-s border-white/10 ps-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedMonth(month.month);
-                          setSelectedDay(null);
-                        }}
-                        className={`w-full rounded-lg px-2 py-1.5 text-start text-xs font-semibold transition ${
-                          selectedMonth === month.month && !selectedDay
-                            ? "bg-forest-500/20 text-forest-200"
-                            : "text-white/65 hover:bg-white/5"
-                        }`}
-                      >
-                        {month.month_label} ({month.count})
-                      </button>
-                      {selectedMonth === month.month &&
-                        month.days.map((day) => (
-                          <button
-                            key={day.date}
-                            type="button"
-                            onClick={() => setSelectedDay(day.day)}
-                            className={`ms-2 mt-1 block w-[calc(100%-0.5rem)] rounded-lg px-2 py-1 text-start text-xs transition ${
-                              selectedDay === day.day
-                                ? "bg-forest-500/15 text-forest-200"
-                                : "text-white/55 hover:bg-white/5"
-                            }`}
-                          >
-                            {day.date} ({day.count})
-                          </button>
-                        ))}
-                    </div>
-                  ))}
-              </div>
-            ))}
-          </div>
-        </aside>
+          {dateFilterOpen && <div className="mt-3">{dateSidebar}</div>}
+        </div>
+        <div className="hidden xl:block">{dateSidebar}</div>
 
         <div>
-          <p className="mb-3 text-sm text-white/55">
-            {selectedYear && selectedMonth && selectedDay && selectedMonthData
-              ? t("admin.showingDay", {
-                  date: selectedMonthData.days.find((d) => d.day === selectedDay)?.date || ""
-                })
-              : selectedYear && selectedMonth
-                ? t("admin.showingMonth", { year: selectedYear, month: selectedMonthData?.month_label || selectedMonth })
-                : selectedYear
-                  ? t("admin.showingYear", { year: selectedYear })
-                  : t("admin.showingAll")}
-          </p>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <p className="text-sm text-white/55">
+              {selectedYear && selectedMonth && selectedDay && selectedMonthData
+                ? t("admin.showingDay", {
+                    date: selectedMonthData.days.find((d) => d.day === selectedDay)?.date || ""
+                  })
+                : selectedYear && selectedMonth
+                  ? t("admin.showingMonth", { year: selectedYear, month: selectedMonthData?.month_label || selectedMonth })
+                  : selectedYear
+                    ? t("admin.showingYear", { year: selectedYear })
+                    : t("admin.showingAll")}
+              {!loading && ` · ${t("admin.resultsCount", { count: filteredBookings.length })}`}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex rounded-xl border border-white/10 bg-black/20 p-1">
+                <button
+                  type="button"
+                  onClick={() => changeViewMode("cards")}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition ${
+                    viewMode === "cards" ? "bg-forest-500/25 text-forest-200" : "text-white/60 hover:text-white"
+                  }`}
+                >
+                  <LayoutGrid size={14} />
+                  {t("admin.viewCards")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => changeViewMode("list")}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition ${
+                    viewMode === "list" ? "bg-forest-500/25 text-forest-200" : "text-white/60 hover:text-white"
+                  }`}
+                >
+                  <List size={14} />
+                  {t("admin.viewList")}
+                </button>
+              </div>
+            </div>
+          </div>
 
-          <div className="overflow-x-auto">
+          <label className="relative mt-4 block">
+            <Search size={16} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-white/40" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={t("admin.searchBookingsPlaceholder")}
+              className={`${inputClass} ps-10`}
+              aria-label={t("admin.searchBookings")}
+            />
+          </label>
+
+          {viewMode === "cards" && (
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+              {loading && (
+                <div className="col-span-full rounded-2xl border border-white/10 bg-black/20 p-8 text-center text-white/50">
+                  {t("availability.loading")}
+                </div>
+              )}
+              {!loading &&
+                filteredBookings.map((booking) => {
+                  const isCancelled = booking.booking_status === "cancelled";
+                  return (
+                    <button
+                      key={booking.id}
+                      type="button"
+                      onClick={() => setDetailBooking(booking)}
+                      className={`rounded-2xl border border-white/10 bg-black/20 p-4 text-start transition hover:border-forest-500/35 hover:bg-black/30 ${
+                        isCancelled ? "border-red-500/20" : ""
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-mono text-lg font-black tracking-wider text-forest-400">{booking.booking_number}</p>
+                          <p className="mt-1 truncate font-semibold text-white">{booking.customer_name}</p>
+                          <p className="mt-1 text-xs text-white/50">
+                            {booking.date} · {booking.time}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">{statusBadge(booking)}{confirmationBadge(booking)}</div>
+                        </div>
+                        {booking.check_in_url ? (
+                          <img
+                            src={qrCodeImageUrl(booking.check_in_url, 72)}
+                            alt={t("booking.qrAlt")}
+                            className="h-16 w-16 shrink-0 rounded-lg border border-white/10 bg-white p-0.5"
+                          />
+                        ) : null}
+                      </div>
+                      <p className="mt-3 text-xs text-white/45">{t("admin.tapForDetails")}</p>
+                    </button>
+                  );
+                })}
+              {!loading && filteredBookings.length === 0 && (
+                <div className="col-span-full rounded-2xl border border-white/10 bg-black/20 p-8 text-center text-white/50">
+                  {t("admin.noBookingsInRange")}
+                </div>
+              )}
+            </div>
+          )}
+
+          {viewMode === "list" && (
+          <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[980px] text-sm">
               <thead className="text-white/60">
                 <tr>
@@ -328,7 +572,7 @@ export function AdminBookingsPanel({
                   </tr>
                 )}
                 {!loading &&
-                  bookings.map((booking) => {
+                  filteredBookings.map((booking) => {
                     const isCancelled = booking.booking_status === "cancelled";
                     return (
                     <tr
@@ -405,23 +649,7 @@ export function AdminBookingsPanel({
                           <span className="mt-1 block text-xs font-bold text-forest-300">{t("checkIn.checkedIn")}</span>
                         )}
                       </td>
-                      <td className="p-3">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ${
-                            isCancelled
-                              ? "bg-red-500/20 text-red-300"
-                              : booking.booking_confirmed
-                                ? "bg-forest-500/20 text-forest-200"
-                                : "bg-yellow-500/15 text-yellow-100"
-                          }`}
-                        >
-                          {isCancelled
-                            ? t("admin.confirmationUncomplete")
-                            : booking.booking_confirmed
-                              ? t("admin.confirmationComplete")
-                              : t("admin.emailPending")}
-                        </span>
-                      </td>
+                      <td className="p-3">{confirmationBadge(booking)}</td>
                       <td className="p-3">
                         <select
                           className={`${inputClass} ${isCancelled ? "border-red-500/30 text-red-400" : ""}`}
@@ -462,7 +690,7 @@ export function AdminBookingsPanel({
                     </tr>
                     );
                   })}
-                {!loading && bookings.length === 0 && (
+                {!loading && filteredBookings.length === 0 && (
                   <tr>
                     <td colSpan={12} className="p-8 text-center text-white/50">
                       {t("admin.noBookingsInRange")}
@@ -472,8 +700,95 @@ export function AdminBookingsPanel({
               </tbody>
             </table>
           </div>
+          )}
         </div>
       </div>
+
+      {detailBooking && (
+        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/80 p-0 sm:items-center sm:p-4" onClick={() => setDetailBooking(null)}>
+          <div
+            className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-[2rem] border border-white/10 bg-forest-950 p-6 shadow-2xl sm:rounded-[2rem]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-black">{t("admin.bookingDetails")}</h3>
+                <p className="mt-2 font-mono text-2xl font-black tracking-wider text-forest-400">{detailBooking.booking_number}</p>
+                <p className="mt-1 text-lg font-semibold text-white">{detailBooking.customer_name}</p>
+              </div>
+              {detailBooking.check_in_url ? (
+                <button type="button" onClick={() => setQrBooking(detailBooking)} className="shrink-0">
+                  <img
+                    src={qrCodeImageUrl(detailBooking.check_in_url, 88)}
+                    alt={t("booking.qrAlt")}
+                    className="h-20 w-20 rounded-xl border border-white/10 bg-white p-1"
+                  />
+                </button>
+              ) : null}
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              {statusBadge(detailBooking)}
+              {confirmationBadge(detailBooking)}
+              {detailBooking.checked_in_at && (
+                <span className="inline-flex rounded-full bg-forest-500/20 px-2 py-1 text-xs font-bold text-forest-200">
+                  {t("checkIn.checkedIn")}
+                </span>
+              )}
+            </div>
+
+            <dl className="mt-6 grid gap-3 text-sm sm:grid-cols-2">
+              {[
+                [t("booking.email"), detailBooking.email],
+                [t("booking.phone"), detailBooking.phone],
+                [t("booking.date"), `${detailBooking.date} ${detailBooking.time}`],
+                [t("booking.passengers"), String(detailBooking.passengers)],
+                [t("booking.buggyBike"), renderBuggyLabel(detailBooking)],
+                [t("booking.total"), `${detailBooking.total_price} ${t("booking.omr")}`],
+                [t("booking.payment"), detailBooking.payment_method],
+                [t("admin.status"), t(`admin.${displayStatus(detailBooking.booking_status)}`)]
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl bg-white/5 px-4 py-3">
+                  <dt className="text-xs font-bold uppercase tracking-wide text-white/45">{label}</dt>
+                  <dd className="mt-1 font-semibold text-white">{value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="mt-2 text-sm text-white/70">{renderPassengerMeta(detailBooking)}</div>
+            {detailBooking.notes ? (
+              <p className="mt-4 rounded-xl bg-white/5 px-4 py-3 text-sm text-white/75">
+                <span className="font-bold text-white/45">{t("booking.notice")}: </span>
+                {detailBooking.notes}
+              </p>
+            ) : null}
+
+            <label className="mt-6 block space-y-2">
+              <span className="text-sm font-semibold text-white/75">{t("admin.status")}</span>
+              <select
+                className={inputClass}
+                value={displayStatus(detailBooking.booking_status)}
+                onChange={(event) => updateStatus(detailBooking.id, event.target.value)}
+              >
+                {statuses.map((status) => (
+                  <option key={status} value={status}>
+                    {t(`admin.${status}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {renderBookingActions(detailBooking)}
+
+            <button
+              type="button"
+              onClick={() => setDetailBooking(null)}
+              className="mt-6 w-full rounded-2xl border border-white/10 px-5 py-3 font-bold"
+            >
+              {t("admin.close")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {replyBooking && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4" onClick={() => setReplyBooking(null)}>
