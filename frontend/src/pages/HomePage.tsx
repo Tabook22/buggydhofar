@@ -4,9 +4,7 @@ import { Link } from "react-router-dom";
 
 import { useTranslation } from "react-i18next";
 
-import { BadgeCheck } from "lucide-react";
-
-import { MapPin, Clock, Navigation } from "lucide-react";
+import { BadgeCheck, MapPin, Clock, Navigation } from "lucide-react";
 
 import { AvailabilityBoard } from "../components/AvailabilityBoard";
 
@@ -20,6 +18,28 @@ import { defaultBookingSelection, loadBookingDraft, saveBookingDraft } from "../
 import { isVideoUrl, resolveMediaUrl } from "../lib/mediaUrl";
 
 
+
+const INSTAGRAM_URL = "https://www.instagram.com/gobuggydhofar/";
+
+function InstagramIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+    </svg>
+  );
+}
 
 const RealMapRoutePreview = lazy(() =>
 
@@ -228,13 +248,24 @@ export default function HomePage() {
 
             <p className="mt-6 max-w-2xl text-xl leading-8 text-white/75">{t("hero.subtitle")}</p>
 
-            <div className="mt-8 flex flex-wrap gap-4">
+            <div className="mt-8 flex flex-wrap items-center gap-4">
 
               <Link to="/booking" className="rounded-full bg-forest-500 px-7 py-4 font-bold text-white shadow-glow transition hover:bg-forest-400">
 
                 {t("hero.cta")}
 
               </Link>
+
+              <a
+                href={INSTAGRAM_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2.5 rounded-full border border-white/15 bg-white/10 px-6 py-3.5 font-bold text-white transition hover:border-pink-400/40 hover:bg-white/15"
+                aria-label={t("hero.instagramAria")}
+              >
+                <InstagramIcon className="h-5 w-5 text-pink-300" />
+                <span>{t("hero.instagram")}</span>
+              </a>
 
             </div>
 
