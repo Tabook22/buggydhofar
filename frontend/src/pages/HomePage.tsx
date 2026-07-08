@@ -20,23 +20,12 @@ import { isVideoUrl, resolveMediaUrl } from "../lib/mediaUrl";
 
 
 const INSTAGRAM_URL = "https://www.instagram.com/gobuggydhofar/";
+const INSTAGRAM_AVATAR_URL = "/social/gobuggydhofar-instagram.jpg";
 
-function InstagramIcon({ className }: { className?: string }) {
+function InstagramGlyph({ className }: { className?: string }) {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
-      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 1.366.062 2.633.334 3.608 1.308.974.974 1.246 2.241 1.308 3.608.058 1.266.07 1.646.07 4.85s-.012 3.584-.07 4.85c-.062 1.366-.334 2.633-1.308 3.608-.974.974-2.241 1.246-3.608 1.308-1.266.058-1.646.07-4.85.07s-3.584-.012-4.85-.07c-1.366-.062-2.633-.334-3.608-1.308-.974-.974-1.246-2.241-1.308-3.608C2.175 15.747 2.163 15.367 2.163 12s.012-3.584.07-4.85c.062-1.366.334-2.633 1.308-3.608.974-.974 2.241-1.246 3.608-1.308C8.416 2.175 8.796 2.163 12 2.163zm0 1.622c-3.154 0-3.527.012-4.764.069-1.026.047-1.584.218-1.955.363-.492.192-.843.422-1.212.79-.368.369-.598.72-.79 1.212-.145.371-.316.929-.363 1.955-.057 1.237-.069 1.61-.069 4.764s.012 3.527.069 4.764c.047 1.026.218 1.584.363 1.955.192.492.422.843.79 1.212.369.368.72.598 1.212.79.371.145.929.316 1.955.363 1.237.057 1.61.069 4.764.069s3.527-.012 4.764-.069c1.026-.047 1.584-.218 1.955-.363.492-.192.843-.422 1.212-.79.368-.369.598-.72.79-1.212.145-.371.316-.929.363-1.955.057-1.237.069-1.61.069-4.764s-.012-3.527-.069-4.764c-.047-1.026-.218-1.584-.363-1.955-.192-.492-.422-.843-.79-1.212-.368-.368-.72-.598-1.212-.79-.371-.145-.929-.316-1.955-.363-1.237-.057-1.61-.069-4.764-.069zm0 3.351a4.864 4.864 0 1 1 0 9.728 4.864 4.864 0 0 1 0-9.728zm0 1.622a3.242 3.242 0 1 0 0 6.484 3.242 3.242 0 0 0 0-6.484zm5.338-3.205a1.136 1.136 0 1 1-2.272 0 1.136 1.136 0 0 1 2.272 0z" />
     </svg>
   );
 }
@@ -260,11 +249,25 @@ export default function HomePage() {
                 href={INSTAGRAM_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2.5 rounded-full border border-white/15 bg-white/10 px-6 py-3.5 font-bold text-white transition hover:border-pink-400/40 hover:bg-white/15"
+                className="group inline-flex items-center gap-3 rounded-full border border-white/15 bg-white/10 pe-5 ps-1.5 py-1.5 font-bold text-white shadow-lg shadow-black/10 transition hover:border-pink-400/40 hover:bg-white/15"
                 aria-label={t("hero.instagramAria")}
               >
-                <InstagramIcon className="h-5 w-5 text-pink-300" />
-                <span>{t("hero.instagram")}</span>
+                <span className="relative shrink-0">
+                  <img
+                    src={INSTAGRAM_AVATAR_URL}
+                    alt=""
+                    width={44}
+                    height={44}
+                    className="h-11 w-11 rounded-full object-cover ring-2 ring-white/25 transition group-hover:ring-pink-300/50"
+                  />
+                  <span className="absolute -bottom-0.5 -end-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] ring-2 ring-forest-950">
+                    <InstagramGlyph className="h-3 w-3 text-white" />
+                  </span>
+                </span>
+                <span className="leading-tight">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-white/55">{t("hero.instagramLabel")}</span>
+                  <span>{t("hero.instagram")}</span>
+                </span>
               </a>
 
             </div>
