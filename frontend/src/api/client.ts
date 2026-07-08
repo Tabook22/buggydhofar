@@ -209,6 +209,7 @@ export type SiteContent = {
   hero_secondary_ar: string;
   hero_note_en: string;
   hero_note_ar: string;
+  hero_background_type: string;
   hero_background_url: string;
   hero_side_image_url: string;
   vehicles_title_en: string;
@@ -517,5 +518,18 @@ export const api = {
       method,
       headers: { Authorization: `Bearer ${token}` },
       body: body ? JSON.stringify(body) : undefined
-    })
+    }),
+  adminUploadMedia: async (token: string, file: File, mediaKind: "image" | "video") => {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(`/api/admin/media/upload?media_kind=${encodeURIComponent(mediaKind)}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form
+    });
+    if (!response.ok) {
+      throw new Error(await parseResponseError(response));
+    }
+    return response.json() as Promise<{ url: string; filename: string; media_kind: string; content_type: string }>;
+  }
 };

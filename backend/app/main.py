@@ -9,12 +9,13 @@ try:
 except ImportError:
     pass
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import extract, func, text
 from sqlalchemy.orm import Session
 
-from . import auth, amwal, booking_archive, booking_lifecycle, booking_numbers, booking_qr, email_service, fleet, models, pricing, routes_geo, schemas, waiver
+from . import auth, amwal, booking_archive, booking_lifecycle, booking_numbers, booking_qr, email_service, fleet, media_storage, models, pricing, routes_geo, schemas, waiver
 from .database import Base, SessionLocal, engine, get_db
 from .seed import seed_database, seed_payment_transfer_defaults
 
@@ -48,6 +49,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+app.mount(
+    media_storage.PUBLIC_UPLOAD_PREFIX,
+    StaticFiles(directory=str(media_storage.upload_root())),
+    name="uploads",
 )
 
 
@@ -91,6 +98,13 @@ def ensure_booking_number_column() -> None:
         connection.execute(
             text("CREATE UNIQUE INDEX IF NOT EXISTS ix_bookings_booking_number ON bookings(booking_number)")
         )
+
+
+def ensure_hero_background_type_column() -> None:
+    with engine.begin() as connection:
+        existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(site_content)"))}
+        if "hero_background_type" not in existing_columns:
+            connection.execute(text("ALTER TABLE site_content ADD COLUMN hero_background_type TEXT DEFAULT 'image'"))
 
 
 def ensure_payment_transfer_columns() -> None:
@@ -310,6 +324,7 @@ def startup() -> None:
     ensure_booking_check_in_columns()
     ensure_admin_role_column()
     ensure_payment_transfer_columns()
+    ensure_hero_background_type_column()
     db = SessionLocal()
     try:
         seed_database(db)
@@ -979,6 +994,15 @@ def admin_routes(_: models.Admin = Depends(auth.get_current_admin), db: Session 
     return db.query(models.Route).order_by(models.Route.id).all()
 
 
+@app.post("/api/admin/media/upload")
+async def admin_upload_media(
+    media_kind: str = "image",
+    file: UploadFile = File(...),
+    _: models.Admin = Depends(auth.get_current_admin),
+):
+    return await media_storage.save_upload(file, media_kind)
+
+
 @app.get("/api/admin/site-content", response_model=schemas.SiteContentOut)
 def admin_site_content(_: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
     return get_site_content(db)
@@ -990,12 +1014,16 @@ def update_site_content(
     _: models.Admin = Depends(auth.get_current_admin),
     db: Session = Depends(get_db),
 ):
+    data = payload.model_dump()
+    bg_type = str(data.get("hero_background_type", "image")).strip().lower()
+    data["hero_background_type"] = "video" if bg_type == "video" else "image"
+
     content = db.query(models.SiteContent).first()
     if not content:
-        content = models.SiteContent(**payload.model_dump())
+        content = models.SiteContent(**data)
         db.add(content)
     else:
-        for key, value in payload.model_dump().items():
+        for key, value in data.items():
             setattr(content, key, value)
     try:
         db.commit()

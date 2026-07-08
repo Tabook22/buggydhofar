@@ -123,6 +123,7 @@ HOME_CONTENT = {
     "hero_secondary_ar": "عرض التجارب",
     "hero_note_en": "Premium guided rides across Salalah and Dhofar",
     "hero_note_ar": "رحلات مميزة بإشراف احترافي في صلالة وظفار",
+    "hero_background_type": "image",
     "hero_background_url": "https://images.unsplash.com/photo-1748460078692-acb877cb6c21?auto=format&fit=crop&w=2200&q=85",
     "hero_side_image_url": "https://images.unsplash.com/photo-1612118756064-5403ff7747de?auto=format&fit=crop&w=1100&q=85",
     "vehicles_title_en": "Choose Your Buggy or Bike",

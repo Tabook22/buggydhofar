@@ -17,6 +17,7 @@ import { BookingSummaryCard, BookingWidget } from "../components/Booking";
 import { FeatureIcon, PageShell } from "../components/Layout";
 
 import { defaultBookingSelection, loadBookingDraft, saveBookingDraft } from "../lib/bookingDraft";
+import { isVideoUrl, resolveMediaUrl } from "../lib/mediaUrl";
 
 
 
@@ -160,6 +161,14 @@ export default function HomePage() {
     saveBookingDraft(selection);
   }, [selection]);
 
+  const heroBackgroundUrl = resolveMediaUrl(content?.hero_background_url);
+  const heroSideImageUrl =
+    resolveMediaUrl(content?.hero_side_image_url) ||
+    "https://images.unsplash.com/photo-1612118756064-5403ff7747de?auto=format&fit=crop&w=1100&q=85";
+  const heroUsesVideo =
+    Boolean(heroBackgroundUrl) &&
+    (content?.hero_background_type === "video" || isVideoUrl(heroBackgroundUrl, content?.hero_background_type));
+
   return (
 
     <PageShell>
@@ -180,27 +189,32 @@ export default function HomePage() {
 
 
 
-      <section
+      <section className="hero-bg relative min-h-screen overflow-hidden px-4 pb-20 pt-32 sm:px-6 lg:px-8">
+        {heroUsesVideo ? (
+          <video
+            className="absolute inset-0 h-full w-full object-cover"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            aria-hidden
+          >
+            <source src={heroBackgroundUrl} />
+          </video>
+        ) : heroBackgroundUrl ? (
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: `url("${heroBackgroundUrl}")` }}
+            aria-hidden
+          />
+        ) : null}
+        <div
+          className="absolute inset-0 bg-gradient-to-br from-forest-950/95 via-forest-950/78 to-forest-900/35"
+          aria-hidden
+        />
 
-        className="hero-bg relative min-h-screen overflow-hidden px-4 pb-20 pt-32 sm:px-6 lg:px-8"
-
-        style={
-
-          content?.hero_background_url
-
-            ? {
-
-                backgroundImage: `linear-gradient(115deg, rgba(5, 19, 13, 0.96), rgba(8, 33, 23, 0.76) 42%, rgba(5, 19, 13, 0.2)), url("${content.hero_background_url}")`
-
-              }
-
-            : undefined
-
-        }
-
-      >
-
-        <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="relative z-10 mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
 
           <div>
 
@@ -242,7 +256,7 @@ export default function HomePage() {
 
             <img
 
-              src={content?.hero_side_image_url || "https://images.unsplash.com/photo-1612118756064-5403ff7747de?auto=format&fit=crop&w=1100&q=85"}
+              src={heroSideImageUrl}
 
               alt="ATV buggy ride on a green off-road trail"
 

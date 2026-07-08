@@ -175,6 +175,7 @@ class SiteContent(Base):
     hero_secondary_ar: Mapped[str] = mapped_column(String(80))
     hero_note_en: Mapped[str] = mapped_column(String(220))
     hero_note_ar: Mapped[str] = mapped_column(String(220))
+    hero_background_type: Mapped[str] = mapped_column(String(16), default="image")
     hero_background_url: Mapped[str] = mapped_column(Text)
     hero_side_image_url: Mapped[str] = mapped_column(Text)
     vehicles_title_en: Mapped[str] = mapped_column(String(180))

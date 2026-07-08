@@ -334,6 +334,7 @@ class SiteContentBase(BaseModel):
     hero_secondary_ar: str
     hero_note_en: str
     hero_note_ar: str
+    hero_background_type: str = "image"
     hero_background_url: str
     hero_side_image_url: str
     vehicles_title_en: str

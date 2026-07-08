@@ -6,6 +6,7 @@ import { api, clearAdminToken, FleetUnit, isAdminAuthError, RouteExperience, Sit
 import { RealMapPathPicker, RealMapRoutePreview } from "../components/RealMapRoute";
 import { AdminBookingsPanel } from "../components/AdminBookingsPanel";
 import { AdminBookingLinkQr } from "../components/AdminBookingLinkQr";
+import { AdminMediaField } from "../components/AdminMediaField";
 import { AdminTransferSettings, defaultTransferSettings } from "../components/AdminTransferSettings";
 
 type Stats = {
@@ -153,6 +154,7 @@ const emptySiteContent: SiteContentForm = {
   hero_secondary_ar: "",
   hero_note_en: "",
   hero_note_ar: "",
+  hero_background_type: "image",
   hero_background_url: "",
   hero_side_image_url: "",
   vehicles_title_en: "",
@@ -671,10 +673,56 @@ export default function AdminDashboard() {
               <input className={inputClass} placeholder="Hero note EN" value={siteContentForm.hero_note_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_note_en: event.target.value })} />
               <input className={inputClass} placeholder="Hero note AR" value={siteContentForm.hero_note_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_note_ar: event.target.value })} />
             </div>
-            <div className="grid gap-4 lg:grid-cols-3">
-              <input className={inputClass} placeholder="Hero background image URL" value={siteContentForm.hero_background_url} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_background_url: event.target.value })} />
-              <input className={inputClass} placeholder="Hero side image URL" value={siteContentForm.hero_side_image_url} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_side_image_url: event.target.value })} />
-              <input className={inputClass} placeholder="Why section image URL" value={siteContentForm.why_image_url} onChange={(event) => setSiteContentForm({ ...siteContentForm, why_image_url: event.target.value })} />
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <p className="font-bold text-white">{t("admin.heroBackgroundTitle")}</p>
+              <p className="mt-1 text-sm text-white/55">{t("admin.heroBackgroundHelp")}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {(["image", "video"] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setSiteContentForm({ ...siteContentForm, hero_background_type: type })}
+                    className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+                      siteContentForm.hero_background_type === type
+                        ? "bg-forest-500/25 text-forest-100"
+                        : "border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    {type === "video" ? t("admin.heroBackgroundVideo") : t("admin.heroBackgroundImage")}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4">
+                <AdminMediaField
+                  label={t("admin.heroBackgroundMedia")}
+                  help={t("admin.heroBackgroundMediaHelp")}
+                  value={siteContentForm.hero_background_url}
+                  onChange={(url) => setSiteContentForm({ ...siteContentForm, hero_background_url: url })}
+                  mediaKind={siteContentForm.hero_background_type === "video" ? "video" : "image"}
+                  token={token}
+                  inputClass={inputClass}
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <AdminMediaField
+                label={t("admin.heroSideImage")}
+                help={t("admin.heroSideImageHelp")}
+                value={siteContentForm.hero_side_image_url}
+                onChange={(url) => setSiteContentForm({ ...siteContentForm, hero_side_image_url: url })}
+                mediaKind="image"
+                token={token}
+                inputClass={inputClass}
+              />
+              <AdminMediaField
+                label={t("admin.whySectionImage")}
+                help={t("admin.whySectionImageHelp")}
+                value={siteContentForm.why_image_url}
+                onChange={(url) => setSiteContentForm({ ...siteContentForm, why_image_url: url })}
+                mediaKind="image"
+                token={token}
+                inputClass={inputClass}
+              />
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
               <input className={inputClass} placeholder="Vehicle section title EN" value={siteContentForm.vehicles_title_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, vehicles_title_en: event.target.value })} />
