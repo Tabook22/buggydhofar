@@ -331,6 +331,7 @@
     "mediaUploadFromPc": "Upload from computer",
     "mediaUploading": "Uploading…",
     "mediaUploadFailed": "Upload failed. Try a smaller file or a direct URL.",
+    "mediaUploadTooLarge": "File is too large. Use a video under 80 MB, or fix the server upload limit (nginx 413).",
     "mediaClear": "Remove",
     "mediaPreviewEmpty": "Preview will appear here",
     "mediaTypeImage": "Image",

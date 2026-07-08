@@ -331,6 +331,7 @@
     "mediaUploadFromPc": "رفع من الجهاز",
     "mediaUploading": "جاري الرفع…",
     "mediaUploadFailed": "فشل الرفع. جرّب ملفاً أصغر أو رابطاً مباشراً.",
+    "mediaUploadTooLarge": "الملف كبير جداً. استخدم فيديو أقل من 80 ميجابايت، أو اضبط حد الرفع على الخادم (خطأ nginx 413).",
     "mediaClear": "إزالة",
     "mediaPreviewEmpty": "ستظهر المعاينة هنا",
     "mediaTypeImage": "صورة",

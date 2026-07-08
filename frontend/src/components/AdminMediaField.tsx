@@ -40,7 +40,12 @@ export function AdminMediaField({
       const result = await api.adminUploadMedia(token, file, mediaKind);
       onChange(result.url);
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : t("admin.mediaUploadFailed"));
+      const message = uploadError instanceof Error ? uploadError.message : "";
+      if (/413|entity too large/i.test(message)) {
+        setError(t("admin.mediaUploadTooLarge"));
+      } else {
+        setError(message || t("admin.mediaUploadFailed"));
+      }
     } finally {
       setUploading(false);
       if (fileInputRef.current) {

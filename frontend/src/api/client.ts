@@ -528,6 +528,9 @@ export const api = {
       body: form
     });
     if (!response.ok) {
+      if (response.status === 413) {
+        throw new Error("413 Request Entity Too Large");
+      }
       throw new Error(await parseResponseError(response));
     }
     return response.json() as Promise<{ url: string; filename: string; media_kind: string; content_type: string }>;

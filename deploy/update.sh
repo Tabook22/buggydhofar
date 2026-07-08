@@ -23,5 +23,9 @@ cd ../frontend
 npm install
 npm run build
 
-sudo systemctl reload nginx
+if [[ -f "$APP_DIR/deploy/patch-nginx-media-upload.sh" ]]; then
+  sudo bash "$APP_DIR/deploy/patch-nginx-media-upload.sh"
+else
+  sudo systemctl reload nginx
+fi
 echo "Update complete."
