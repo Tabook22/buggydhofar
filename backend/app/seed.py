@@ -204,13 +204,9 @@ def seed_database(db: Session) -> None:
             if vehicle is None:
                 db.add(models.Vehicle(**vehicle_data))
 
+    # Only seed default paths on a brand-new database. Do not re-create paths the admin deleted.
     if db.query(models.Route).count() == 0 and db.query(models.SiteContent).first() is None:
         db.add_all(models.Route(**route) for route in ROUTES)
-    elif db.query(models.Route).count() > 0:
-        for route_data in ROUTES:
-            route = db.query(models.Route).filter(models.Route.name_en == route_data["name_en"]).first()
-            if route is None:
-                db.add(models.Route(**route_data))
 
     if db.query(models.Admin).filter(models.Admin.username == "admin").first() is None:
         db.add(models.Admin(username="admin", password_hash=hash_password("admin123"), role="admin"))
