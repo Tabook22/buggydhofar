@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import extract, func, text
 from sqlalchemy.orm import Session
 
-from . import auth, amwal, booking_archive, booking_lifecycle, booking_numbers, booking_qr, email_service, fleet, media_storage, models, pricing, promo_codes, routes_geo, schemas, waiver
+from . import auth, amwal, booking_archive, booking_lifecycle, booking_numbers, booking_qr, email_service, fleet, media_assets, media_storage, models, pricing, promo_codes, routes_geo, schemas, waiver
 from .database import Base, SessionLocal, engine, get_db
 from .seed import seed_database, seed_payment_transfer_defaults
 
@@ -397,6 +397,19 @@ def get_site_content(db: Session = Depends(get_db)):
     if not content:
         raise HTTPException(status_code=404, detail="Site content not found")
     return content
+
+
+@app.get("/api/gallery", response_model=list[schemas.MediaAssetOut])
+def get_home_gallery(db: Session = Depends(get_db)):
+    return (
+        db.query(models.MediaAsset)
+        .filter(
+            models.MediaAsset.is_active == True,  # noqa: E712
+            models.MediaAsset.show_on_home_gallery == True,  # noqa: E712
+        )
+        .order_by(models.MediaAsset.sort_order.asc(), models.MediaAsset.id.desc())
+        .all()
+    )
 
 
 @app.post("/api/contact", response_model=schemas.ContactOut)
@@ -967,6 +980,126 @@ def validate_promo_code(payload: schemas.PromoValidateRequest, db: Session = Dep
         tax_amount=tax_amount,
         total_price=total_price,
     )
+
+
+@app.get("/api/admin/media-assets", response_model=list[schemas.MediaAssetOut])
+def admin_list_media_assets(
+    category: str | None = None,
+    _: models.Admin = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.MediaAsset)
+    if category:
+        try:
+            normalized = media_assets.normalize_category(category)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        query = query.filter(models.MediaAsset.category == normalized)
+    return query.order_by(models.MediaAsset.sort_order.asc(), models.MediaAsset.id.desc()).all()
+
+
+@app.post("/api/admin/media-assets", response_model=schemas.MediaAssetOut)
+def admin_create_media_asset(
+    payload: schemas.MediaAssetCreate,
+    _: models.Admin = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        category, media_kind, url, thumbnail_url = media_assets.validate_media_payload(
+            category=payload.category,
+            media_kind=payload.media_kind,
+            url=payload.url,
+            thumbnail_url=payload.thumbnail_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    asset = models.MediaAsset(
+        category=category,
+        media_kind=media_kind,
+        url=url,
+        thumbnail_url=thumbnail_url,
+        title_en=(payload.title_en or "").strip() or None,
+        title_ar=(payload.title_ar or "").strip() or None,
+        instagram_url=(payload.instagram_url or "").strip() or None,
+        sort_order=payload.sort_order,
+        is_active=payload.is_active,
+        show_on_home_gallery=payload.show_on_home_gallery,
+    )
+    db.add(asset)
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Could not save media asset.") from exc
+    db.refresh(asset)
+    return asset
+
+
+@app.patch("/api/admin/media-assets/{asset_id}", response_model=schemas.MediaAssetOut)
+def admin_update_media_asset(
+    asset_id: int,
+    payload: schemas.MediaAssetUpdate,
+    _: models.Admin = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    asset = db.get(models.MediaAsset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Media asset not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    category = data.get("category", asset.category)
+    media_kind = data.get("media_kind", asset.media_kind)
+    url = data.get("url", asset.url)
+    thumbnail_url = data.get("thumbnail_url", asset.thumbnail_url)
+    try:
+        category, media_kind, url, thumbnail_url = media_assets.validate_media_payload(
+            category=category,
+            media_kind=media_kind,
+            url=url,
+            thumbnail_url=thumbnail_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    data["category"] = category
+    data["media_kind"] = media_kind
+    data["url"] = url
+    data["thumbnail_url"] = thumbnail_url
+    if "title_en" in data:
+        data["title_en"] = (data["title_en"] or "").strip() or None
+    if "title_ar" in data:
+        data["title_ar"] = (data["title_ar"] or "").strip() or None
+    if "instagram_url" in data:
+        data["instagram_url"] = (data["instagram_url"] or "").strip() or None
+
+    for key, value in data.items():
+        setattr(asset, key, value)
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Could not update media asset.") from exc
+    db.refresh(asset)
+    return asset
+
+
+@app.delete("/api/admin/media-assets/{asset_id}")
+def admin_delete_media_asset(
+    asset_id: int,
+    _: models.Admin = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    asset = db.get(models.MediaAsset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Media asset not found")
+    db.delete(asset)
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Could not delete media asset.") from exc
+    return {"status": "deleted", "asset_id": asset_id}
 
 
 @app.get("/api/admin/promo-codes", response_model=list[schemas.PromoCodeOut])

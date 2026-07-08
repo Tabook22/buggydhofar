@@ -106,6 +106,23 @@ export type PromoValidatePayload = {
   booking_mode: BookingMode;
 };
 
+export type MediaAssetCategory = "gallery" | "hero" | "routes" | "testimonials" | "general";
+
+export type MediaAsset = {
+  id: number;
+  category: MediaAssetCategory;
+  media_kind: "image" | "video";
+  url: string;
+  thumbnail_url: string | null;
+  title_en: string | null;
+  title_ar: string | null;
+  instagram_url: string | null;
+  sort_order: number;
+  is_active: boolean;
+  show_on_home_gallery: boolean;
+  created_at: string;
+};
+
 export type PromoValidateResult = {
   valid: boolean;
   code: string;
@@ -493,6 +510,7 @@ export const api = {
   getFleetAvailability: (date: string, time: string) =>
     request<FleetAvailabilityResponse>(`/api/availability/fleet?date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}`),
   getSiteContent: () => request<SiteContent>("/api/site-content"),
+  getGallery: () => request<MediaAsset[]>("/api/gallery"),
   checkAvailability: (params: URLSearchParams) =>
     request<{ available: boolean; available_count: number; total_bikes: number; message: string }>(`/api/availability?${params.toString()}`),
   createBooking: (payload: BookingPayload) =>

@@ -7,6 +7,7 @@ import { RealMapPathPicker, RealMapRoutePreview } from "../components/RealMapRou
 import { AdminBookingsPanel } from "../components/AdminBookingsPanel";
 import { AdminBookingLinkQr } from "../components/AdminBookingLinkQr";
 import { AdminMediaField } from "../components/AdminMediaField";
+import { AdminMediaLibrary } from "../components/AdminMediaLibrary";
 import { AdminPromoCodes } from "../components/AdminPromoCodes";
 import { AdminTransferSettings, defaultTransferSettings } from "../components/AdminTransferSettings";
 
@@ -656,7 +657,8 @@ export default function AdminDashboard() {
         )}
 
         {activeTab === "content" && (
-        <section className="mt-6 rounded-[2rem] bg-white/5 p-6">
+        <div className="mt-6 space-y-0">
+        <section className="rounded-[2rem] bg-white/5 p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h2 className="text-2xl font-black">Main Page Content & Images</h2>
@@ -747,6 +749,8 @@ export default function AdminDashboard() {
             <button className="w-fit rounded-2xl bg-forest-500 px-6 py-3 font-bold text-white">Save Main Page Content</button>
           </form>
         </section>
+        <AdminMediaLibrary token={token} onAuthFailure={handleAuthFailure} embedded />
+        </div>
         )}
 
         {activeTab === "fleet" && (

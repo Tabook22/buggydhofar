@@ -297,6 +297,57 @@ class PromoValidateRequest(BaseModel):
     booking_mode: str = "group"
 
 
+MEDIA_ASSET_CATEGORIES = ("gallery", "hero", "routes", "testimonials", "general")
+
+
+class MediaAssetBase(BaseModel):
+    category: str = "gallery"
+    media_kind: str = "image"
+    url: str
+    thumbnail_url: str | None = None
+    title_en: str | None = None
+    title_ar: str | None = None
+    instagram_url: str | None = None
+    sort_order: int = 0
+    is_active: bool = True
+    show_on_home_gallery: bool = False
+
+
+class MediaAssetCreate(MediaAssetBase):
+    pass
+
+
+class MediaAssetUpdate(BaseModel):
+    category: str | None = None
+    media_kind: str | None = None
+    url: str | None = None
+    thumbnail_url: str | None = None
+    title_en: str | None = None
+    title_ar: str | None = None
+    instagram_url: str | None = None
+    sort_order: int | None = None
+    is_active: bool | None = None
+    show_on_home_gallery: bool | None = None
+
+
+class MediaAssetOut(BaseModel):
+    id: int
+    category: str
+    media_kind: str
+    url: str
+    thumbnail_url: str | None = None
+    title_en: str | None = None
+    title_ar: str | None = None
+    instagram_url: str | None = None
+    sort_order: int
+    is_active: bool
+    show_on_home_gallery: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class PromoValidateOut(BaseModel):
     valid: bool
     code: str

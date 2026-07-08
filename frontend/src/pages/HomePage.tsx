@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { BadgeCheck, MapPin, Clock, Navigation } from "lucide-react";
 
 import { AvailabilityBoard } from "../components/AvailabilityBoard";
+import { HomeInstagramGallery } from "../components/HomeInstagramGallery";
 
 import { api, RouteExperience, SiteContent, Vehicle } from "../api/client";
 
@@ -482,7 +483,7 @@ export default function HomePage() {
 
       )}
 
-
+      <HomeInstagramGallery />
 
       <section id="how" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
 

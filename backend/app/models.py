@@ -119,6 +119,23 @@ class Booking(Base):
     email_logs: Mapped[list["BookingEmailLog"]] = relationship(back_populates="booking")
 
 
+class MediaAsset(Base):
+    __tablename__ = "media_assets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    category: Mapped[str] = mapped_column(String(24), default="gallery", index=True)
+    media_kind: Mapped[str] = mapped_column(String(16), default="image")
+    url: Mapped[str] = mapped_column(Text)
+    thumbnail_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title_en: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    title_ar: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    instagram_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    show_on_home_gallery: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class PromoCode(Base):
     __tablename__ = "promo_codes"
 
