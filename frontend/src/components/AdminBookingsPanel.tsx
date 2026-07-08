@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronUp, LayoutGrid, List, Search } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, LayoutGrid, List, Search } from "lucide-react";
 import { api, groupTypeLabel, isAdminAuthError, normalizeGroupType } from "../api/client";
 import { qrCodeImageUrl } from "../lib/bookingQr";
 import { BookingQrCode } from "./BookingQrCode";
@@ -65,6 +65,7 @@ type BookingWaiver = {
 
 const inputClass = "w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-white outline-none focus:border-forest-400";
 const VIEW_STORAGE_KEY = "admin_bookings_view";
+const BOOKINGS_PAGE_SIZE = 20;
 
 type ViewMode = "cards" | "list";
 
@@ -136,6 +137,7 @@ export function AdminBookingsPanel({
   const [viewMode, setViewMode] = useState<ViewMode>(defaultViewMode);
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const loadBookings = useCallback(
     async (year: number | null, month: number | null, day: number | null) => {
@@ -236,7 +238,32 @@ export function AdminBookingsPanel({
 
   const statuses = ["pending", "paid", "cancelled"];
   const filteredBookings = useMemo(() => filterBookings(bookings, searchQuery), [bookings, searchQuery]);
+  const pagination = useMemo(() => {
+    const total = filteredBookings.length;
+    const totalPages = Math.max(1, Math.ceil(total / BOOKINGS_PAGE_SIZE));
+    const safePage = Math.min(Math.max(1, currentPage), totalPages);
+    const startIndex = (safePage - 1) * BOOKINGS_PAGE_SIZE;
+    const endIndex = Math.min(startIndex + BOOKINGS_PAGE_SIZE, total);
+    return {
+      total,
+      totalPages,
+      safePage,
+      startIndex,
+      endIndex,
+      items: filteredBookings.slice(startIndex, endIndex)
+    };
+  }, [filteredBookings, currentPage]);
   const selectedMonthData = archive?.years.find((y) => y.year === selectedYear)?.months.find((m) => m.month === selectedMonth);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedYear, selectedMonth, selectedDay, viewMode]);
+
+  useEffect(() => {
+    if (currentPage > pagination.totalPages) {
+      setCurrentPage(pagination.totalPages);
+    }
+  }, [currentPage, pagination.totalPages]);
 
   function changeViewMode(mode: ViewMode) {
     setViewMode(mode);
@@ -456,7 +483,7 @@ export function AdminBookingsPanel({
                   : selectedYear
                     ? t("admin.showingYear", { year: selectedYear })
                     : t("admin.showingAll")}
-              {!loading && ` · ${t("admin.resultsCount", { count: filteredBookings.length })}`}
+              {!loading && ` · ${t("admin.resultsCount", { count: pagination.total })}`}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <div className="inline-flex rounded-xl border border-white/10 bg-black/20 p-1">
@@ -504,7 +531,7 @@ export function AdminBookingsPanel({
                 </div>
               )}
               {!loading &&
-                filteredBookings.map((booking) => {
+                pagination.items.map((booking) => {
                   const isCancelled = booking.booking_status === "cancelled";
                   return (
                     <button
@@ -572,7 +599,7 @@ export function AdminBookingsPanel({
                   </tr>
                 )}
                 {!loading &&
-                  filteredBookings.map((booking) => {
+                  pagination.items.map((booking) => {
                     const isCancelled = booking.booking_status === "cancelled";
                     return (
                     <tr
@@ -700,6 +727,43 @@ export function AdminBookingsPanel({
               </tbody>
             </table>
           </div>
+          )}
+
+          {!loading && pagination.total > 0 && (
+            <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-white/60">
+                {t("admin.showingRange", {
+                  from: pagination.startIndex + 1,
+                  to: pagination.endIndex,
+                  total: pagination.total
+                })}
+              </p>
+              <div className="flex items-center justify-between gap-3 sm:justify-end">
+                <p className="text-sm font-semibold text-white/75">
+                  {t("admin.pageOf", { page: pagination.safePage, total: pagination.totalPages })}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={pagination.safePage <= 1}
+                    onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                    className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-white/85 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronLeft size={16} />
+                    {t("admin.previousPage")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pagination.safePage >= pagination.totalPages}
+                    onClick={() => setCurrentPage((page) => Math.min(pagination.totalPages, page + 1))}
+                    className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-white/85 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {t("admin.nextPage")}
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>
