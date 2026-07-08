@@ -285,31 +285,24 @@ export default function HomePage() {
 
           </div>
 
-          <div className="relative">
-
-            <div className="absolute inset-10 rounded-full bg-forest-400/20 blur-3xl" />
-
-            <img
-
-              src={heroSideImageUrl}
-
-              alt="ATV buggy ride on a green off-road trail"
-
-              className="animate-float relative z-10 aspect-[4/3] rounded-[2.5rem] object-cover shadow-glow"
-
-            />
-
-            <div className="glass absolute bottom-4 z-20 max-w-xs rounded-3xl p-5 ltr:left-4 rtl:right-4">
-
-              <p className="flex items-center gap-2 font-bold text-forest-400">
-
-                <BadgeCheck size={20} /> {t("hero.stats")}
-
-              </p>
-
-            </div>
-
-          </div>
+          <HomeInstagramGallery
+            variant="hero"
+            fallback={
+              <div className="relative">
+                <div className="absolute inset-10 rounded-full bg-forest-400/20 blur-3xl" aria-hidden />
+                <img
+                  src={heroSideImageUrl}
+                  alt="ATV buggy ride on a green off-road trail"
+                  className="animate-float relative z-10 aspect-[4/3] rounded-[2.5rem] object-cover shadow-glow"
+                />
+                <div className="glass absolute bottom-4 z-20 max-w-xs rounded-3xl p-5 ltr:left-4 rtl:right-4">
+                  <p className="flex items-center gap-2 font-bold text-forest-400">
+                    <BadgeCheck size={20} /> {t("hero.stats")}
+                  </p>
+                </div>
+              </div>
+            }
+          />
 
         </div>
 
@@ -482,8 +475,6 @@ export default function HomePage() {
         </section>
 
       )}
-
-      <HomeInstagramGallery />
 
       <section id="how" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
 

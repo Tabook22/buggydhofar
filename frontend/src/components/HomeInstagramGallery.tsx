@@ -1,6 +1,11 @@
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ExternalLink, Play, X } from "lucide-react";
+import { api, MediaAsset } from "../api/client";
+import { isVideoUrl, resolveMediaUrl } from "../lib/mediaUrl";
+
+const INSTAGRAM_URL = "https://www.instagram.com/gobuggydhofar/";
+const HERO_GALLERY_LIMIT = 4;
 
 function InstagramGlyph({ className }: { className?: string }) {
   return (
@@ -9,10 +14,6 @@ function InstagramGlyph({ className }: { className?: string }) {
     </svg>
   );
 }
-import { api, MediaAsset } from "../api/client";
-import { isVideoUrl, resolveMediaUrl } from "../lib/mediaUrl";
-
-const INSTAGRAM_URL = "https://www.instagram.com/gobuggydhofar/";
 
 function galleryTitle(item: MediaAsset, language: string) {
   const title = language.startsWith("ar") ? item.title_ar || item.title_en : item.title_en || item.title_ar;
@@ -22,11 +23,13 @@ function galleryTitle(item: MediaAsset, language: string) {
 function GalleryTile({
   item,
   language,
-  onOpen
+  onOpen,
+  compact = false
 }: {
   item: MediaAsset;
   language: string;
   onOpen: (item: MediaAsset) => void;
+  compact?: boolean;
 }) {
   const mediaUrl = resolveMediaUrl(item.url);
   const thumbUrl = resolveMediaUrl(item.thumbnail_url) || mediaUrl;
@@ -37,7 +40,9 @@ function GalleryTile({
     <button
       type="button"
       onClick={() => onOpen(item)}
-      className="group relative aspect-square overflow-hidden rounded-[1.75rem] border border-white/10 bg-black/30 text-start shadow-lg transition hover:border-forest-400/35 hover:shadow-glow"
+      className={`group relative aspect-square overflow-hidden border border-white/10 bg-black/30 text-start shadow-lg transition hover:border-pink-400/35 hover:shadow-glow ${
+        compact ? "rounded-2xl" : "rounded-[1.75rem]"
+      }`}
     >
       {isVideo ? (
         <video
@@ -59,23 +64,90 @@ function GalleryTile({
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-forest-950/90 via-forest-950/10 to-transparent opacity-80 transition group-hover:opacity-100" />
       {isVideo && (
-        <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 backdrop-blur transition group-hover:bg-forest-500/40">
-          <Play size={22} className="ms-0.5 text-white" fill="currentColor" />
+        <span
+          className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 backdrop-blur transition group-hover:bg-pink-500/35 ${
+            compact ? "h-9 w-9" : "h-12 w-12"
+          }`}
+        >
+          <Play size={compact ? 16 : 22} className="ms-0.5 text-white" fill="currentColor" />
         </span>
       )}
-      {title ? (
+      {title && !compact ? (
         <span className="absolute inset-x-0 bottom-0 p-4 text-sm font-bold leading-snug text-white">{title}</span>
       ) : null}
       {item.instagram_url ? (
-        <span className="absolute end-3 top-3 rounded-full bg-black/45 p-2 text-pink-200 opacity-0 transition group-hover:opacity-100">
-          <InstagramGlyph className="h-4 w-4" />
+        <span className="absolute end-2 top-2 rounded-full bg-black/45 p-1.5 text-pink-200 opacity-0 transition group-hover:opacity-100">
+          <InstagramGlyph className="h-3.5 w-3.5" />
         </span>
       ) : null}
     </button>
   );
 }
 
-export function HomeInstagramGallery() {
+function GalleryLightbox({
+  activeItem,
+  language,
+  onClose
+}: {
+  activeItem: MediaAsset;
+  language: string;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const activeUrl = resolveMediaUrl(activeItem.url);
+  const activeIsVideo = isVideoUrl(activeUrl, activeItem.media_kind);
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-4" onClick={onClose}>
+      <div
+        className="relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-[2rem] border border-white/10 bg-forest-950 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute end-4 top-4 z-10 rounded-full bg-black/50 p-2 text-white hover:bg-black/70"
+          aria-label={t("gallery.close")}
+        >
+          <X size={20} />
+        </button>
+        {activeIsVideo ? (
+          <video src={activeUrl} controls autoPlay className="max-h-[80vh] w-full bg-black object-contain" />
+        ) : (
+          <img src={activeUrl} alt={galleryTitle(activeItem, language)} className="max-h-[80vh] w-full object-contain" />
+        )}
+        {(galleryTitle(activeItem, language) || activeItem.instagram_url) && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
+            {galleryTitle(activeItem, language) ? (
+              <p className="font-bold text-white">{galleryTitle(activeItem, language)}</p>
+            ) : (
+              <span />
+            )}
+            {activeItem.instagram_url ? (
+              <a
+                href={activeItem.instagram_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm font-bold text-pink-200 hover:text-pink-100"
+              >
+                <InstagramGlyph className="h-4 w-4" />
+                {t("gallery.viewOnInstagram")}
+              </a>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function HomeInstagramGallery({
+  variant = "section",
+  fallback = null
+}: {
+  variant?: "hero" | "section";
+  fallback?: ReactNode;
+}) {
   const { t, i18n } = useTranslation();
   const [items, setItems] = useState<MediaAsset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,10 +161,6 @@ export function HomeInstagramGallery() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading || items.length === 0) {
-    return null;
-  }
-
   function openItem(item: MediaAsset) {
     if (item.instagram_url) {
       window.open(item.instagram_url, "_blank", "noopener,noreferrer");
@@ -101,8 +169,66 @@ export function HomeInstagramGallery() {
     setActiveItem(item);
   }
 
-  const activeUrl = activeItem ? resolveMediaUrl(activeItem.url) : "";
-  const activeIsVideo = activeItem ? isVideoUrl(activeUrl, activeItem.media_kind) : false;
+  if (loading) {
+    return variant === "hero" ? fallback : null;
+  }
+
+  if (items.length === 0) {
+    return variant === "hero" ? fallback : null;
+  }
+
+  const heroItems = items.slice(0, HERO_GALLERY_LIMIT);
+  const displayItems = variant === "hero" ? heroItems : items;
+
+  const followLink = (
+    <a
+      href={INSTAGRAM_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`inline-flex items-center gap-2 font-bold text-white transition hover:text-pink-200 ${
+        variant === "hero"
+          ? "rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm hover:border-pink-400/35 hover:bg-white/15"
+          : "rounded-full border border-white/15 bg-white/10 px-6 py-3 hover:border-pink-400/35 hover:bg-white/15"
+      }`}
+    >
+      <InstagramGlyph className={variant === "hero" ? "h-4 w-4 text-pink-300" : "h-[18px] w-[18px] text-pink-300"} />
+      {t("gallery.follow")}
+      <ExternalLink size={variant === "hero" ? 14 : 16} className="text-white/50" />
+    </a>
+  );
+
+  if (variant === "hero") {
+    return (
+      <div className="relative" id="instagram">
+        <div className="absolute inset-6 rounded-full bg-pink-500/10 blur-3xl" aria-hidden />
+        <div className="glass relative z-10 rounded-[2.5rem] p-5 sm:p-6">
+          <p className="inline-flex items-center gap-2 rounded-full border border-pink-400/25 bg-pink-500/10 px-3 py-1.5 text-xs font-bold text-pink-200">
+            <InstagramGlyph className="h-3.5 w-3.5" />
+            {t("gallery.badge")}
+          </p>
+          <h2 className="mt-4 text-2xl font-black leading-tight text-white sm:text-3xl">{t("gallery.title")}</h2>
+          <p className="mt-2 text-sm leading-6 text-white/70 sm:text-base">{t("gallery.subtitle")}</p>
+
+          <div className="mt-5 grid grid-cols-2 gap-2.5 sm:gap-3">
+            {heroItems.map((item) => (
+              <GalleryTile key={item.id} item={item} language={i18n.language} onOpen={openItem} compact />
+            ))}
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+            {followLink}
+            {items.length > HERO_GALLERY_LIMIT ? (
+              <p className="text-xs font-semibold text-white/45">
+                +{items.length - HERO_GALLERY_LIMIT} {t("gallery.moreOnInstagram")}
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        {activeItem && <GalleryLightbox activeItem={activeItem} language={i18n.language} onClose={() => setActiveItem(null)} />}
+      </div>
+    );
+  }
 
   return (
     <section id="instagram" className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
@@ -115,69 +241,16 @@ export function HomeInstagramGallery() {
           <h2 className="mt-5 text-4xl font-black md:text-5xl">{t("gallery.title")}</h2>
           <p className="mt-4 text-lg text-white/70">{t("gallery.subtitle")}</p>
         </div>
-        <a
-          href={INSTAGRAM_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-6 py-3 font-bold text-white transition hover:border-pink-400/35 hover:bg-white/15"
-        >
-          <InstagramGlyph className="h-[18px] w-[18px] text-pink-300" />
-          {t("gallery.follow")}
-          <ExternalLink size={16} className="text-white/50" />
-        </a>
+        {followLink}
       </div>
 
       <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
-        {items.map((item) => (
+        {displayItems.map((item) => (
           <GalleryTile key={item.id} item={item} language={i18n.language} onOpen={openItem} />
         ))}
       </div>
 
-      {activeItem && (
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-4"
-          onClick={() => setActiveItem(null)}
-        >
-          <div
-            className="relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-[2rem] border border-white/10 bg-forest-950 shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => setActiveItem(null)}
-              className="absolute end-4 top-4 z-10 rounded-full bg-black/50 p-2 text-white hover:bg-black/70"
-              aria-label={t("gallery.close")}
-            >
-              <X size={20} />
-            </button>
-            {activeIsVideo ? (
-              <video src={activeUrl} controls autoPlay className="max-h-[80vh] w-full bg-black object-contain" />
-            ) : (
-              <img src={activeUrl} alt={galleryTitle(activeItem, i18n.language)} className="max-h-[80vh] w-full object-contain" />
-            )}
-            {(galleryTitle(activeItem, i18n.language) || activeItem.instagram_url) && (
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
-                {galleryTitle(activeItem, i18n.language) ? (
-                  <p className="font-bold text-white">{galleryTitle(activeItem, i18n.language)}</p>
-                ) : (
-                  <span />
-                )}
-                {activeItem.instagram_url ? (
-                  <a
-                    href={activeItem.instagram_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-sm font-bold text-pink-200 hover:text-pink-100"
-                  >
-                    <InstagramGlyph className="h-4 w-4" />
-                    {t("gallery.viewOnInstagram")}
-                  </a>
-                ) : null}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {activeItem && <GalleryLightbox activeItem={activeItem} language={i18n.language} onClose={() => setActiveItem(null)} />}
     </section>
   );
 }
