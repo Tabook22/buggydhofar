@@ -8,7 +8,10 @@ import {
   AdminModule,
   AdminPermissions,
   emptyPermissions,
+  fullStaffPermissions,
+  hasFullStaffPermissions,
   normalizePermissions,
+  staffModules,
   stripNonViewPermissions
 } from "../lib/adminPermissions";
 
@@ -143,17 +146,24 @@ function PermissionsEditor({
   form,
   isNormalRole,
   onToggle,
+  onSetPermissions,
   t
 }: {
   form: UserForm;
   isNormalRole: boolean;
   onToggle: (module: AdminModule, action: keyof AdminPermissions[AdminModule]) => void;
+  onSetPermissions: (permissions: AdminPermissions) => void;
   t: (key: string) => string;
 }) {
-  const editableModules = ADMIN_MODULES.filter((module) => module !== "users");
+  const editableModules = staffModules();
   const permissionActions = isNormalRole
     ? (["view"] as const)
     : (["view", "create", "edit", "delete"] as const);
+  const allSelected = hasFullStaffPermissions(form.permissions, isNormalRole);
+
+  function toggleAll() {
+    onSetPermissions(allSelected ? emptyPermissions() : fullStaffPermissions(isNormalRole));
+  }
 
   return (
     <div className="overflow-x-auto rounded-xl border border-white/10">
@@ -172,6 +182,15 @@ function PermissionsEditor({
           </tr>
         </thead>
         <tbody>
+          <tr className="border-b border-white/10 bg-forest-500/10">
+            <td className="p-2 font-bold text-forest-200">{t("admin.permAll")}</td>
+            <td colSpan={isNormalRole ? 1 : 4} className="p-2">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-white">
+                <input type="checkbox" checked={allSelected} onChange={toggleAll} />
+                <span>{isNormalRole ? t("admin.permAllNormalHint") : t("admin.permAllHint")}</span>
+              </label>
+            </td>
+          </tr>
           {editableModules.map((module) => (
             <tr key={module} className="border-t border-white/10">
               <td className="p-2 font-semibold">{t(moduleLabelKey(module))}</td>
@@ -583,6 +602,7 @@ export function AdminUsersPanel({
                               form={editForm}
                               isNormalRole={isNormalEditRole}
                               onToggle={toggleEditPermission}
+                              onSetPermissions={(permissions) => setEditForm({ ...editForm, permissions })}
                               t={t}
                             />
                           </div>
@@ -671,6 +691,7 @@ export function AdminUsersPanel({
               form={addForm}
               isNormalRole={isNormalAddRole}
               onToggle={toggleAddPermission}
+              onSetPermissions={(permissions) => setAddForm({ ...addForm, permissions })}
               t={t}
             />
           </div>

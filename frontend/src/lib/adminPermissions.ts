@@ -62,6 +62,32 @@ export function fullPermissions(): AdminPermissions {
   ) as AdminPermissions;
 }
 
+export function staffModules(): AdminModule[] {
+  return ADMIN_MODULES.filter((module) => module !== "users");
+}
+
+export function fullStaffPermissions(viewOnly = false): AdminPermissions {
+  const perms = emptyPermissions();
+  for (const module of staffModules()) {
+    perms[module].view = true;
+    if (!viewOnly) {
+      perms[module].create = true;
+      perms[module].edit = true;
+      perms[module].delete = true;
+    }
+  }
+  return perms;
+}
+
+export function hasFullStaffPermissions(permissions: AdminPermissions, viewOnly = false): boolean {
+  const normalized = normalizePermissions(permissions);
+  return staffModules().every((module) => {
+    if (!normalized[module].view) return false;
+    if (viewOnly) return true;
+    return normalized[module].create && normalized[module].edit && normalized[module].delete;
+  });
+}
+
 export function normalizePermissions(raw: Partial<AdminPermissions> | null | undefined): AdminPermissions {
   const base = emptyPermissions();
   if (!raw) return base;
