@@ -19,6 +19,7 @@ bearer_scheme = HTTPBearer()
 
 ROLE_SUPER_ADMIN = "super_admin"
 ROLE_ADMIN = "admin"
+ROLE_NORMAL = "normal"
 ROLE_SCANNER = "scanner"
 
 
@@ -46,6 +47,8 @@ def normalize_role(role: str | None) -> str:
         return ROLE_SCANNER
     if role == ROLE_SUPER_ADMIN:
         return ROLE_SUPER_ADMIN
+    if role == ROLE_NORMAL:
+        return ROLE_NORMAL
     return ROLE_ADMIN
 
 
@@ -88,7 +91,7 @@ def get_current_admin(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Scanner accounts must sign in at the staff portal.",
         )
-    if role not in {ROLE_SUPER_ADMIN, ROLE_ADMIN}:
+    if role not in {ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_NORMAL}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This account cannot access the admin dashboard.",

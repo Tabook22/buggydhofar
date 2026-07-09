@@ -930,7 +930,7 @@ def admin_login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     role = auth.admin_role(admin)
     if role == auth.ROLE_SCANNER:
         raise HTTPException(status_code=403, detail="Scanner accounts must sign in at the staff portal.")
-    if role not in {perm.ROLE_SUPER_ADMIN, perm.ROLE_ADMIN}:
+    if role not in {perm.ROLE_SUPER_ADMIN, perm.ROLE_ADMIN, perm.ROLE_NORMAL}:
         raise HTTPException(status_code=403, detail="This account cannot access the admin dashboard.")
     return perm.auth_token_payload(admin)
 
@@ -962,11 +962,14 @@ def admin_create_user(
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
     if db.query(models.Admin).filter(models.Admin.username == username).first():
         raise HTTPException(status_code=409, detail="Username already exists.")
+    if payload.role not in perm.MANAGEABLE_ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role. Choose admin or normal.")
+    sanitized = perm.sanitize_permissions_for_role(payload.role, payload.permissions.model_dump())
     user = models.Admin(
         username=username,
         password_hash=auth.hash_password(payload.password),
-        role=perm.ROLE_ADMIN,
-        permissions=perm.permissions_to_json(payload.permissions.model_dump()),
+        role=payload.role,
+        permissions=perm.permissions_to_json(sanitized),
     )
     db.add(user)
     db.commit()
@@ -984,8 +987,12 @@ def admin_update_user(
     user = db.get(models.Admin, user_id)
     if not user or user.role == perm.ROLE_SCANNER:
         raise HTTPException(status_code=404, detail="Admin user not found.")
-    if perm.is_super_admin(user) and payload.permissions is not None:
-        raise HTTPException(status_code=400, detail="Super admin permissions cannot be changed here.")
+    if perm.is_super_admin(user) and (payload.permissions is not None or payload.role is not None):
+        raise HTTPException(status_code=400, detail="Super admin account cannot be changed here.")
+    if payload.role is not None:
+        if payload.role not in perm.MANAGEABLE_ROLES:
+            raise HTTPException(status_code=400, detail="Invalid role. Choose admin or normal.")
+        user.role = payload.role
     if payload.username is not None:
         username = payload.username.strip()
         if len(username) < 3:
@@ -999,7 +1006,13 @@ def admin_update_user(
             raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
         user.password_hash = auth.hash_password(payload.password)
     if payload.permissions is not None and not perm.is_super_admin(user):
-        user.permissions = perm.permissions_to_json(payload.permissions.model_dump())
+        sanitized = perm.sanitize_permissions_for_role(user.role, payload.permissions.model_dump())
+        user.permissions = perm.permissions_to_json(sanitized)
+    elif payload.role == perm.ROLE_NORMAL and not perm.is_super_admin(user):
+        existing = perm.permissions_from_admin(user)
+        user.permissions = perm.permissions_to_json(
+            perm.sanitize_permissions_for_role(perm.ROLE_NORMAL, existing)
+        )
     db.commit()
     db.refresh(user)
     if current.id == user.id and payload.username:

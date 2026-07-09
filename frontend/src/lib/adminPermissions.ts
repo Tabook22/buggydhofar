@@ -78,7 +78,18 @@ export function normalizePermissions(raw: Partial<AdminPermissions> | null | und
 export function can(session: AdminSession | null, module: AdminModule, action: AdminAction): boolean {
   if (!session) return false;
   if (session.is_super_admin) return true;
+  if (session.role === "normal" && action !== "view") return false;
   return Boolean(session.permissions[module]?.[action]);
+}
+
+export function stripNonViewPermissions(permissions: AdminPermissions): AdminPermissions {
+  const next = normalizePermissions(permissions);
+  for (const module of ADMIN_MODULES) {
+    next[module].create = false;
+    next[module].edit = false;
+    next[module].delete = false;
+  }
+  return next;
 }
 
 export function isSuperAdminSession(session: AdminSession | null): boolean {

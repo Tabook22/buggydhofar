@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -456,12 +457,14 @@ class AdminUserOut(BaseModel):
 class AdminUserCreate(BaseModel):
     username: str
     password: str
+    role: Literal["admin", "normal"] = "admin"
     permissions: AdminPermissionsOut
 
 
 class AdminUserUpdate(BaseModel):
     username: str | None = None
     password: str | None = None
+    role: Literal["admin", "normal"] | None = None
     permissions: AdminPermissionsOut | None = None
 
 

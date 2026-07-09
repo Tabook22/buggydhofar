@@ -13,7 +13,10 @@ from .database import get_db
 
 ROLE_SUPER_ADMIN = "super_admin"
 ROLE_ADMIN = "admin"
+ROLE_NORMAL = "normal"
 ROLE_SCANNER = "scanner"
+
+MANAGEABLE_ROLES = frozenset({ROLE_ADMIN, ROLE_NORMAL})
 
 MODULES = (
     "overview",
@@ -79,12 +82,27 @@ def is_super_admin(admin: models.Admin) -> bool:
 
 def is_panel_admin(admin: models.Admin) -> bool:
     role = getattr(admin, "role", None) or ROLE_ADMIN
-    return role in {ROLE_SUPER_ADMIN, ROLE_ADMIN}
+    return role in {ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_NORMAL}
+
+
+def sanitize_permissions_for_role(
+    role: str,
+    permissions: dict[str, dict[str, bool]],
+) -> dict[str, dict[str, bool]]:
+    normalized = normalize_permissions(permissions)
+    if role == ROLE_NORMAL:
+        for module in MODULES:
+            for action in ("create", "edit", "delete"):
+                normalized[module][action] = False
+    return normalized
 
 
 def has_permission(admin: models.Admin, module: str, action: str) -> bool:
     if is_super_admin(admin):
         return True
+    role = getattr(admin, "role", None) or ROLE_ADMIN
+    if role == ROLE_NORMAL and action != "view":
+        return False
     permissions = permissions_from_admin(admin)
     module_perms = permissions.get(module, {})
     return bool(module_perms.get(action))

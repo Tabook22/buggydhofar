@@ -7,10 +7,13 @@ import {
   AdminModule,
   AdminPermissions,
   emptyPermissions,
-  normalizePermissions
+  normalizePermissions,
+  stripNonViewPermissions
 } from "../lib/adminPermissions";
 
 const inputClass = "w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-white outline-none focus:border-forest-400";
+
+type StaffRole = "admin" | "normal";
 
 type AdminUser = {
   id: number;
@@ -24,11 +27,16 @@ type AdminUser = {
 type UserForm = {
   username: string;
   password: string;
+  role: StaffRole;
   permissions: AdminPermissions;
 };
 
 function moduleLabelKey(module: AdminModule) {
   return `admin.permModule_${module}`;
+}
+
+function manageableRole(role: string): StaffRole {
+  return role === "normal" ? "normal" : "admin";
 }
 
 export function AdminUsersPanel({
@@ -49,8 +57,11 @@ export function AdminUsersPanel({
   const [form, setForm] = useState<UserForm>({
     username: "",
     password: "",
+    role: "admin",
     permissions: emptyPermissions()
   });
+
+  const isNormalRole = form.role === "normal";
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -72,20 +83,34 @@ export function AdminUsersPanel({
 
   function resetForm() {
     setEditingId(null);
-    setForm({ username: "", password: "", permissions: emptyPermissions() });
+    setForm({ username: "", password: "", role: "admin", permissions: emptyPermissions() });
   }
 
   function startEdit(user: AdminUser) {
+    const role = manageableRole(user.role);
     setEditingId(user.id);
     setForm({
       username: user.username,
       password: "",
-      permissions: normalizePermissions(user.permissions)
+      role,
+      permissions:
+        role === "normal"
+          ? stripNonViewPermissions(normalizePermissions(user.permissions))
+          : normalizePermissions(user.permissions)
     });
     setStatus(null);
   }
 
+  function setRole(role: StaffRole) {
+    setForm((current) => ({
+      ...current,
+      role,
+      permissions: role === "normal" ? stripNonViewPermissions(current.permissions) : current.permissions
+    }));
+  }
+
   function togglePermission(module: AdminModule, action: keyof AdminPermissions[AdminModule]) {
+    if (isNormalRole && action !== "view") return;
     setForm((current) => {
       const next = normalizePermissions(current.permissions);
       const enabled = !next[module][action];
@@ -102,15 +127,29 @@ export function AdminUsersPanel({
     });
   }
 
+  function roleLabel(role: string, isSuperAdmin: boolean) {
+    if (isSuperAdmin) return t("admin.superAdmin");
+    if (role === "normal") return t("admin.roleNormal");
+    return t("admin.roleAdmin");
+  }
+
   async function submitUser(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
     setStatus(null);
+    const permissions =
+      form.role === "normal" ? stripNonViewPermissions(form.permissions) : form.permissions;
     try {
       if (editingId) {
-        const payload: { username: string; password?: string; permissions: AdminPermissions } = {
+        const payload: {
+          username: string;
+          role: StaffRole;
+          password?: string;
+          permissions: AdminPermissions;
+        } = {
           username: form.username.trim(),
-          permissions: form.permissions
+          role: form.role,
+          permissions
         };
         if (form.password.trim()) {
           payload.password = form.password;
@@ -126,7 +165,8 @@ export function AdminUsersPanel({
         await api.adminSend("/api/admin/users", token, "POST", {
           username: form.username.trim(),
           password: form.password,
-          permissions: form.permissions
+          role: form.role,
+          permissions
         });
         setStatus(t("admin.userCreated"));
       }
@@ -154,6 +194,9 @@ export function AdminUsersPanel({
   }
 
   const editableModules = ADMIN_MODULES.filter((module) => module !== "users");
+  const permissionActions = isNormalRole
+    ? (["view"] as const)
+    : (["view", "create", "edit", "delete"] as const);
 
   return (
     <section className={embedded ? "" : "mt-6 rounded-[2rem] bg-white/5 p-6"}>
@@ -170,7 +213,7 @@ export function AdminUsersPanel({
 
       <form onSubmit={submitUser} className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
         <h3 className="text-lg font-bold">{editingId ? t("admin.editUser") : t("admin.addUser")}</h3>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
           <input
             className={inputClass}
             required
@@ -186,7 +229,18 @@ export function AdminUsersPanel({
             value={form.password}
             onChange={(event) => setForm({ ...form, password: event.target.value })}
           />
+          <select
+            className={inputClass}
+            value={form.role}
+            onChange={(event) => setRole(event.target.value as StaffRole)}
+          >
+            <option value="admin">{t("admin.roleAdmin")}</option>
+            <option value="normal">{t("admin.roleNormal")}</option>
+          </select>
         </div>
+        {isNormalRole && (
+          <p className="mt-3 text-xs text-white/50">{t("admin.roleNormalHint")}</p>
+        )}
 
         <div className="mt-5 overflow-x-auto rounded-2xl border border-white/10">
           <table className="w-full min-w-[720px] text-sm">
@@ -194,16 +248,20 @@ export function AdminUsersPanel({
               <tr>
                 <th className="p-3 text-start">{t("admin.permArea")}</th>
                 <th className="p-3 text-center">{t("admin.permView")}</th>
-                <th className="p-3 text-center">{t("admin.permAdd")}</th>
-                <th className="p-3 text-center">{t("admin.permEdit")}</th>
-                <th className="p-3 text-center">{t("admin.permDelete")}</th>
+                {!isNormalRole && (
+                  <>
+                    <th className="p-3 text-center">{t("admin.permAdd")}</th>
+                    <th className="p-3 text-center">{t("admin.permEdit")}</th>
+                    <th className="p-3 text-center">{t("admin.permDelete")}</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
               {editableModules.map((module) => (
                 <tr key={module} className="border-t border-white/10">
                   <td className="p-3 font-semibold">{t(moduleLabelKey(module))}</td>
-                  {(["view", "create", "edit", "delete"] as const).map((action) => (
+                  {permissionActions.map((action) => (
                     <td key={action} className="p-3 text-center">
                       <input
                         type="checkbox"
@@ -253,7 +311,9 @@ export function AdminUsersPanel({
                     </span>
                   )}
                 </p>
-                <p className="mt-1 text-xs text-white/50">{t("admin.userRole", { role: user.role })}</p>
+                <p className="mt-1 text-xs text-white/50">
+                  {t("admin.userRole", { role: roleLabel(user.role, user.is_super_admin) })}
+                </p>
               </div>
               <div className="flex gap-2">
                 {!user.is_super_admin && (
