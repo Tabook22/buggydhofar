@@ -1,6 +1,6 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronUp, Eye, Pencil, Shield, Trash2, UserPlus } from "lucide-react";
+import { ChevronDown, ChevronUp, Eye, Shield, Trash2, UserPlus } from "lucide-react";
 import { api, isAdminAuthError } from "../api/client";
 import {
   ADMIN_MODULES,
@@ -38,6 +38,19 @@ function moduleLabelKey(module: AdminModule) {
 
 function manageableRole(role: string): StaffRole {
   return role === "normal" ? "normal" : "admin";
+}
+
+function formFromUser(user: AdminUser): UserForm {
+  const role = manageableRole(user.role);
+  return {
+    username: user.username,
+    password: "",
+    role,
+    permissions:
+      role === "normal"
+        ? stripNonViewPermissions(normalizePermissions(user.permissions))
+        : normalizePermissions(user.permissions)
+  };
 }
 
 function formatCreatedAt(value: string, locale: string) {
@@ -80,9 +93,7 @@ function UserPermissionsMatrix({
   const actions: AdminAction[] = viewOnly ? ["view"] : ["view", "create", "edit", "delete"];
 
   if (user.is_super_admin) {
-    return (
-      <p className="text-sm text-forest-200">{t("admin.userAllAccess")}</p>
-    );
+    return <p className="text-sm text-forest-200">{t("admin.userAllAccess")}</p>;
   }
 
   const hasAny = modules.some((module) => enabledActions(user.permissions, module, viewOnly).length > 0);
@@ -128,6 +139,59 @@ function UserPermissionsMatrix({
   );
 }
 
+function PermissionsEditor({
+  form,
+  isNormalRole,
+  onToggle,
+  t
+}: {
+  form: UserForm;
+  isNormalRole: boolean;
+  onToggle: (module: AdminModule, action: keyof AdminPermissions[AdminModule]) => void;
+  t: (key: string) => string;
+}) {
+  const editableModules = ADMIN_MODULES.filter((module) => module !== "users");
+  const permissionActions = isNormalRole
+    ? (["view"] as const)
+    : (["view", "create", "edit", "delete"] as const);
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-white/10">
+      <table className="w-full min-w-[560px] text-sm">
+        <thead className="bg-white/5 text-white/60">
+          <tr>
+            <th className="p-2 text-start">{t("admin.permArea")}</th>
+            <th className="p-2 text-center">{t("admin.permView")}</th>
+            {!isNormalRole && (
+              <>
+                <th className="p-2 text-center">{t("admin.permAdd")}</th>
+                <th className="p-2 text-center">{t("admin.permEdit")}</th>
+                <th className="p-2 text-center">{t("admin.permDelete")}</th>
+              </>
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {editableModules.map((module) => (
+            <tr key={module} className="border-t border-white/10">
+              <td className="p-2 font-semibold">{t(moduleLabelKey(module))}</td>
+              {permissionActions.map((action) => (
+                <td key={action} className="p-2 text-center">
+                  <input
+                    type="checkbox"
+                    checked={form.permissions[module][action]}
+                    onChange={() => onToggle(module, action)}
+                  />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function AdminUsersPanel({
   token,
   onAuthFailure,
@@ -138,21 +202,24 @@ export function AdminUsersPanel({
   embedded?: boolean;
 }) {
   const { t, i18n } = useTranslation();
-  const formRef = useRef<HTMLFormElement>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [form, setForm] = useState<UserForm>({
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editForm, setEditForm] = useState<UserForm | null>(null);
+  const [addForm, setAddForm] = useState<UserForm>({
     username: "",
     password: "",
     role: "admin",
     permissions: emptyPermissions()
   });
 
-  const isNormalRole = form.role === "normal";
+  const isEditingAdd = showAddForm && editingId === null;
+  const isNormalEditRole = editForm?.role === "normal";
+  const isNormalAddRole = addForm.role === "normal";
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -172,53 +239,78 @@ export function AdminUsersPanel({
     loadUsers();
   }, [loadUsers]);
 
-  function resetForm() {
+  function resetAddForm() {
+    setShowAddForm(false);
+    setAddForm({ username: "", password: "", role: "admin", permissions: emptyPermissions() });
+  }
+
+  function cancelEdit() {
     setEditingId(null);
-    setForm({ username: "", password: "", role: "admin", permissions: emptyPermissions() });
+    setEditForm(null);
   }
 
-  function scrollToForm() {
-    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  function startEdit(user: AdminUser) {
-    const role = manageableRole(user.role);
+  function selectUser(user: AdminUser) {
+    if (user.is_super_admin) {
+      setExpandedId((current) => (current === user.id ? null : user.id));
+      cancelEdit();
+      return;
+    }
+    setShowAddForm(false);
     setEditingId(user.id);
-    setExpandedId(user.id);
-    setForm({
-      username: user.username,
-      password: "",
-      role,
-      permissions:
-        role === "normal"
-          ? stripNonViewPermissions(normalizePermissions(user.permissions))
-          : normalizePermissions(user.permissions)
-    });
+    setExpandedId(null);
+    setEditForm(formFromUser(user));
     setStatus(null);
-    scrollToForm();
   }
 
-  function toggleView(user: AdminUser) {
+  function toggleView(user: AdminUser, event: React.MouseEvent) {
+    event.stopPropagation();
+    if (editingId === user.id) return;
     setExpandedId((current) => (current === user.id ? null : user.id));
   }
 
-  function setRole(role: StaffRole) {
-    setForm((current) => ({
+  function setEditRole(role: StaffRole) {
+    setEditForm((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        role,
+        permissions: role === "normal" ? stripNonViewPermissions(current.permissions) : current.permissions
+      };
+    });
+  }
+
+  function setAddRole(role: StaffRole) {
+    setAddForm((current) => ({
       ...current,
       role,
       permissions: role === "normal" ? stripNonViewPermissions(current.permissions) : current.permissions
     }));
   }
 
-  function togglePermission(module: AdminModule, action: keyof AdminPermissions[AdminModule]) {
-    if (isNormalRole && action !== "view") return;
-    setForm((current) => {
+  function toggleEditPermission(module: AdminModule, action: keyof AdminPermissions[AdminModule]) {
+    if (!editForm || (isNormalEditRole && action !== "view")) return;
+    setEditForm((current) => {
+      if (!current) return current;
       const next = normalizePermissions(current.permissions);
       const enabled = !next[module][action];
       next[module][action] = enabled;
-      if (action !== "view" && enabled) {
-        next[module].view = true;
+      if (action !== "view" && enabled) next[module].view = true;
+      if (action === "view" && !enabled) {
+        next[module].create = false;
+        next[module].edit = false;
+        next[module].delete = false;
       }
+      return { ...current, permissions: next };
+    });
+  }
+
+  function toggleAddPermission(module: AdminModule, action: keyof AdminPermissions[AdminModule]) {
+    if (isNormalAddRole && action !== "view") return;
+    setAddForm((current) => {
+      const next = normalizePermissions(current.permissions);
+      const enabled = !next[module][action];
+      next[module][action] = enabled;
+      if (action !== "view" && enabled) next[module].view = true;
       if (action === "view" && !enabled) {
         next[module].create = false;
         next[module].edit = false;
@@ -248,44 +340,30 @@ export function AdminUsersPanel({
     return parts.length ? parts.join(" · ") : t("admin.userNoAccess");
   }
 
-  async function submitUser(event: FormEvent) {
+  async function saveEdit(event: FormEvent, userId: number) {
     event.preventDefault();
+    if (!editForm) return;
     setSaving(true);
     setStatus(null);
     const permissions =
-      form.role === "normal" ? stripNonViewPermissions(form.permissions) : form.permissions;
+      editForm.role === "normal" ? stripNonViewPermissions(editForm.permissions) : editForm.permissions;
     try {
-      if (editingId) {
-        const payload: {
-          username: string;
-          role: StaffRole;
-          password?: string;
-          permissions: AdminPermissions;
-        } = {
-          username: form.username.trim(),
-          role: form.role,
-          permissions
-        };
-        if (form.password.trim()) {
-          payload.password = form.password;
-        }
-        await api.adminSend(`/api/admin/users/${editingId}`, token, "PATCH", payload);
-        setStatus(t("admin.userUpdated"));
-      } else {
-        if (!form.password.trim()) {
-          setStatus(t("admin.userPasswordRequired"));
-          setSaving(false);
-          return;
-        }
-        await api.adminSend("/api/admin/users", token, "POST", {
-          username: form.username.trim(),
-          password: form.password,
-          role: form.role,
-          permissions
-        });
-        setStatus(t("admin.userCreated"));
+      const payload: {
+        username: string;
+        role: StaffRole;
+        password?: string;
+        permissions: AdminPermissions;
+      } = {
+        username: editForm.username.trim(),
+        role: editForm.role,
+        permissions
+      };
+      if (editForm.password.trim()) {
+        payload.password = editForm.password;
       }
-      resetForm();
+      await api.adminSend(`/api/admin/users/${userId}`, token, "PATCH", payload);
+      setStatus(t("admin.userUpdated"));
+      cancelEdit();
       await loadUsers();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : t("admin.userSaveFailed"));
@@ -294,13 +372,42 @@ export function AdminUsersPanel({
     }
   }
 
-  async function deleteUser(user: AdminUser) {
+  async function saveNewUser(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setStatus(null);
+    const permissions =
+      addForm.role === "normal" ? stripNonViewPermissions(addForm.permissions) : addForm.permissions;
+    try {
+      if (!addForm.password.trim()) {
+        setStatus(t("admin.userPasswordRequired"));
+        setSaving(false);
+        return;
+      }
+      await api.adminSend("/api/admin/users", token, "POST", {
+        username: addForm.username.trim(),
+        password: addForm.password,
+        role: addForm.role,
+        permissions
+      });
+      setStatus(t("admin.userCreated"));
+      resetAddForm();
+      await loadUsers();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : t("admin.userSaveFailed"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteUser(user: AdminUser, event: React.MouseEvent) {
+    event.stopPropagation();
     if (user.is_super_admin) return;
     if (!window.confirm(t("admin.userDeleteConfirm", { username: user.username }))) return;
     setStatus(null);
     try {
       await api.adminSend(`/api/admin/users/${user.id}`, token, "DELETE");
-      if (editingId === user.id) resetForm();
+      if (editingId === user.id) cancelEdit();
       if (expandedId === user.id) setExpandedId(null);
       setStatus(t("admin.userDeleted"));
       await loadUsers();
@@ -309,18 +416,26 @@ export function AdminUsersPanel({
     }
   }
 
-  const editableModules = ADMIN_MODULES.filter((module) => module !== "users");
-  const permissionActions = isNormalRole
-    ? (["view"] as const)
-    : (["view", "create", "edit", "delete"] as const);
-
   return (
     <section className={embedded ? "" : "mt-6 rounded-[2rem] bg-white/5 p-6"}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black">{t("admin.usersTitle")}</h2>
           <p className="mt-2 max-w-3xl text-sm text-white/60">{t("admin.usersSubtitle")}</p>
+          <p className="mt-1 text-xs text-white/45">{t("admin.clickUserToEdit")}</p>
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            cancelEdit();
+            setExpandedId(null);
+            setShowAddForm(true);
+          }}
+          className="inline-flex items-center gap-2 rounded-2xl bg-forest-500 px-4 py-2 text-sm font-bold"
+        >
+          <UserPlus size={16} />
+          {t("admin.addUser")}
+        </button>
       </div>
 
       {status && (
@@ -345,11 +460,24 @@ export function AdminUsersPanel({
           ) : (
             users.map((user) => {
               const isExpanded = expandedId === user.id;
-              const isEditing = editingId === user.id;
+              const isEditing = editingId === user.id && editForm !== null;
+              const canEdit = !user.is_super_admin;
+
               return (
                 <div
                   key={user.id}
-                  className={`rounded-2xl border bg-white/5 ${isEditing ? "border-forest-400/50" : "border-white/10"}`}
+                  className={`rounded-2xl border bg-white/5 transition-colors ${
+                    isEditing ? "border-forest-400/60 ring-1 ring-forest-400/20" : "border-white/10"
+                  } ${canEdit ? "cursor-pointer hover:border-white/25" : ""}`}
+                  onClick={() => selectUser(user)}
+                  onKeyDown={(event) => {
+                    if (canEdit && (event.key === "Enter" || event.key === " ")) {
+                      event.preventDefault();
+                      selectUser(user);
+                    }
+                  }}
+                  role={canEdit ? "button" : undefined}
+                  tabIndex={canEdit ? 0 : undefined}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-4 p-4">
                     <div className="min-w-0 flex-1">
@@ -376,44 +504,111 @@ export function AdminUsersPanel({
                       <p className="mt-1 text-xs text-white/45">
                         {t("admin.userCreatedAt", { date: formatCreatedAt(user.created_at, i18n.language) })}
                       </p>
-                      <p className="mt-2 text-sm text-white/65">{accessSummary(user)}</p>
+                      {!isEditing && <p className="mt-2 text-sm text-white/65">{accessSummary(user)}</p>}
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => toggleView(user)}
-                        className="inline-flex items-center gap-1 rounded-xl border border-white/10 px-3 py-2 text-sm text-white/80"
-                      >
-                        <Eye size={14} />
-                        {isExpanded ? t("admin.hideAccess") : t("admin.viewAccess")}
-                        {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                      </button>
-                      {!user.is_super_admin && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => startEdit(user)}
-                            className="inline-flex items-center gap-1 rounded-xl border border-forest-400/30 px-3 py-2 text-sm text-forest-300"
-                          >
-                            <Pencil size={14} />
-                            {t("admin.edit")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteUser(user)}
-                            className="inline-flex items-center gap-1 rounded-xl border border-red-400/20 px-3 py-2 text-sm text-red-300"
-                          >
-                            <Trash2 size={14} />
-                            {t("admin.delete")}
-                          </button>
-                        </>
+                    <div className="flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
+                      {!isEditing && (
+                        <button
+                          type="button"
+                          onClick={(event) => toggleView(user, event)}
+                          className="inline-flex items-center gap-1 rounded-xl border border-white/10 px-3 py-2 text-sm text-white/80"
+                        >
+                          <Eye size={14} />
+                          {isExpanded ? t("admin.hideAccess") : t("admin.viewAccess")}
+                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+                      )}
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={(event) => deleteUser(user, event)}
+                          className="inline-flex items-center gap-1 rounded-xl border border-red-400/20 px-3 py-2 text-sm text-red-300"
+                        >
+                          <Trash2 size={14} />
+                          {t("admin.delete")}
+                        </button>
                       )}
                     </div>
                   </div>
 
-                  {isExpanded && (
-                    <div className="border-t border-white/10 px-4 pb-4 pt-3">
+                  {isEditing && editForm && (
+                    <form
+                      className="border-t border-forest-400/20 px-4 pb-4 pt-4"
+                      onSubmit={(event) => saveEdit(event, user.id)}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <p className="mb-4 text-sm text-white/70">{t("admin.editUserHint")}</p>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <label className="block">
+                          <span className="mb-1 block text-xs text-white/50">{t("admin.username")}</span>
+                          <input
+                            className={inputClass}
+                            required
+                            value={editForm.username}
+                            onChange={(event) => setEditForm({ ...editForm, username: event.target.value })}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-xs text-white/50">{t("admin.changePassword")}</span>
+                          <input
+                            className={inputClass}
+                            type="password"
+                            placeholder={t("admin.newPasswordOptional")}
+                            value={editForm.password}
+                            onChange={(event) => setEditForm({ ...editForm, password: event.target.value })}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-xs text-white/50">{t("admin.userRoleLabel")}</span>
+                          <select
+                            className={inputClass}
+                            value={editForm.role}
+                            onChange={(event) => setEditRole(event.target.value as StaffRole)}
+                          >
+                            <option value="admin">{t("admin.roleAdmin")}</option>
+                            <option value="normal">{t("admin.roleNormal")}</option>
+                          </select>
+                        </label>
+                      </div>
+                      {isNormalEditRole && (
+                        <p className="mt-3 text-xs text-white/50">{t("admin.roleNormalHint")}</p>
+                      )}
+                      <div className="mt-4">
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/45">
+                          {t("admin.userAccessDetails")}
+                        </p>
+                        <PermissionsEditor
+                          form={editForm}
+                          isNormalRole={isNormalEditRole}
+                          onToggle={toggleEditPermission}
+                          t={t}
+                        />
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button
+                          type="submit"
+                          disabled={saving}
+                          className="rounded-2xl bg-forest-500 px-5 py-3 font-bold disabled:opacity-60"
+                        >
+                          {saving ? t("admin.saving") : t("admin.saveUser")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            cancelEdit();
+                          }}
+                          className="rounded-2xl border border-white/10 px-5 py-3 font-bold"
+                        >
+                          {t("admin.cancel")}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {isExpanded && !isEditing && (
+                    <div className="border-t border-white/10 px-4 pb-4 pt-3" onClick={(event) => event.stopPropagation()}>
                       <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/45">
                         {t("admin.userAccessDetails")}
                       </p>
@@ -427,98 +622,70 @@ export function AdminUsersPanel({
         </div>
       </div>
 
-      <form
-        ref={formRef}
-        onSubmit={submitUser}
-        className={`mt-6 rounded-2xl border bg-black/20 p-5 ${
-          editingId ? "border-forest-400/40" : "border-white/10"
-        }`}
-      >
-        <h3 className="text-lg font-bold">
-          {editingId ? t("admin.editUser") : t("admin.addUser")}
-        </h3>
-        {editingId && (
-          <p className="mt-1 text-sm text-white/50">{t("admin.editUserHint")}</p>
-        )}
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <input
-            className={inputClass}
-            required
-            placeholder={t("admin.username")}
-            value={form.username}
-            onChange={(event) => setForm({ ...form, username: event.target.value })}
-          />
-          <input
-            className={inputClass}
-            type="password"
-            placeholder={editingId ? t("admin.newPasswordOptional") : t("admin.password")}
-            required={!editingId}
-            value={form.password}
-            onChange={(event) => setForm({ ...form, password: event.target.value })}
-          />
-          <select
-            className={inputClass}
-            value={form.role}
-            onChange={(event) => setRole(event.target.value as StaffRole)}
-          >
-            <option value="admin">{t("admin.roleAdmin")}</option>
-            <option value="normal">{t("admin.roleNormal")}</option>
-          </select>
-        </div>
-        {isNormalRole && (
-          <p className="mt-3 text-xs text-white/50">{t("admin.roleNormalHint")}</p>
-        )}
-
-        <div className="mt-5 overflow-x-auto rounded-2xl border border-white/10">
-          <table className="w-full min-w-[720px] text-sm">
-            <thead className="bg-white/5 text-white/60">
-              <tr>
-                <th className="p-3 text-start">{t("admin.permArea")}</th>
-                <th className="p-3 text-center">{t("admin.permView")}</th>
-                {!isNormalRole && (
-                  <>
-                    <th className="p-3 text-center">{t("admin.permAdd")}</th>
-                    <th className="p-3 text-center">{t("admin.permEdit")}</th>
-                    <th className="p-3 text-center">{t("admin.permDelete")}</th>
-                  </>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {editableModules.map((module) => (
-                <tr key={module} className="border-t border-white/10">
-                  <td className="p-3 font-semibold">{t(moduleLabelKey(module))}</td>
-                  {permissionActions.map((action) => (
-                    <td key={action} className="p-3 text-center">
-                      <input
-                        type="checkbox"
-                        checked={form.permissions[module][action]}
-                        onChange={() => togglePermission(module, action)}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-3">
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded-2xl bg-forest-500 px-5 py-3 font-bold disabled:opacity-60"
-          >
-            <UserPlus size={16} />
-            {saving ? t("admin.saving") : editingId ? t("admin.saveUser") : t("admin.createUser")}
-          </button>
-          {editingId && (
-            <button type="button" onClick={resetForm} className="rounded-2xl border border-white/10 px-5 py-3 font-bold">
+      {isEditingAdd && (
+        <form
+          onSubmit={saveNewUser}
+          className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5"
+        >
+          <h3 className="text-lg font-bold">{t("admin.addUser")}</h3>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <label className="block">
+              <span className="mb-1 block text-xs text-white/50">{t("admin.username")}</span>
+              <input
+                className={inputClass}
+                required
+                value={addForm.username}
+                onChange={(event) => setAddForm({ ...addForm, username: event.target.value })}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-white/50">{t("admin.password")}</span>
+              <input
+                className={inputClass}
+                type="password"
+                required
+                value={addForm.password}
+                onChange={(event) => setAddForm({ ...addForm, password: event.target.value })}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-white/50">{t("admin.userRoleLabel")}</span>
+              <select
+                className={inputClass}
+                value={addForm.role}
+                onChange={(event) => setAddRole(event.target.value as StaffRole)}
+              >
+                <option value="admin">{t("admin.roleAdmin")}</option>
+                <option value="normal">{t("admin.roleNormal")}</option>
+              </select>
+            </label>
+          </div>
+          {isNormalAddRole && (
+            <p className="mt-3 text-xs text-white/50">{t("admin.roleNormalHint")}</p>
+          )}
+          <div className="mt-4">
+            <PermissionsEditor
+              form={addForm}
+              isNormalRole={isNormalAddRole}
+              onToggle={toggleAddPermission}
+              t={t}
+            />
+          </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-2xl bg-forest-500 px-5 py-3 font-bold disabled:opacity-60"
+            >
+              <UserPlus size={16} />
+              {saving ? t("admin.saving") : t("admin.createUser")}
+            </button>
+            <button type="button" onClick={resetAddForm} className="rounded-2xl border border-white/10 px-5 py-3 font-bold">
               {t("admin.cancel")}
             </button>
-          )}
-        </div>
-      </form>
+          </div>
+        </form>
+      )}
     </section>
   );
 }

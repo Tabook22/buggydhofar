@@ -607,6 +607,8 @@
     "hideAccess": "Hide access",
     "editingUser": "Editing",
     "editUserHint": "Update username, password, role, or section permissions below.",
+    "clickUserToEdit": "Click any user to edit their password, role, and features.",
+    "changePassword": "Change password",
     "userRole": "Role: {{role}}",
     "userRoleLabel": "Role",
     "roleAdmin": "Admin",
