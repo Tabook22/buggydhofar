@@ -472,16 +472,38 @@ export function isAdminAuthError(message: string) {
 
 export function clearAdminToken() {
   localStorage.removeItem("khareef-admin-token");
+  localStorage.removeItem("khareef-admin-session");
 }
 
 export const ADMIN_TOKEN_KEY = "khareef-admin-token";
 export const STAFF_TOKEN_KEY = "khareef-staff-token";
+
+export type AdminModulePermissions = {
+  view: boolean;
+  create: boolean;
+  edit: boolean;
+  delete: boolean;
+};
+
+export type AdminPermissions = {
+  overview: AdminModulePermissions;
+  bookings: AdminModulePermissions;
+  promo: AdminModulePermissions;
+  transfer: AdminModulePermissions;
+  content: AdminModulePermissions;
+  fleet: AdminModulePermissions;
+  paths: AdminModulePermissions;
+  vehicles: AdminModulePermissions;
+  users: AdminModulePermissions;
+};
 
 export type AuthTokenResponse = {
   access_token: string;
   token_type: string;
   role: string;
   username: string;
+  is_super_admin?: boolean;
+  permissions?: AdminPermissions | null;
 };
 
 export type ContactPayload = {

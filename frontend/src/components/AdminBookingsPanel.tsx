@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, LayoutGrid, List, Search, Trash2 } from "lucide-react";
 import { api, groupTypeLabel, isAdminAuthError, normalizeGroupType } from "../api/client";
+import { AdminSession, can } from "../lib/adminPermissions";
 import { qrCodeImageUrl } from "../lib/bookingQr";
 import { BookingQrCode } from "./BookingQrCode";
 
@@ -112,12 +113,16 @@ function archiveQuery(year: number | null, month: number | null, day: number | n
 export function AdminBookingsPanel({
   token,
   onAuthFailure,
+  permissions = null,
   embedded = false
 }: {
   token: string;
   onAuthFailure: (message?: string) => void;
+  permissions?: AdminSession | null;
   embedded?: boolean;
 }) {
+  const canEditBookings = can(permissions, "bookings", "edit");
+  const canDeleteBookings = can(permissions, "bookings", "delete");
   const { t, i18n } = useTranslation();
   const [archive, setArchive] = useState<BookingArchive | null>(null);
   const [bookings, setBookings] = useState<AdminBooking[]>([]);
@@ -419,26 +424,30 @@ export function AdminBookingsPanel({
             {t("admin.viewWaiver")}
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => openReply(booking)}
-          className={`rounded-xl px-3 py-1.5 text-xs font-bold ${
-            isCancelled
-              ? "bg-red-500/15 text-red-300 hover:bg-red-500/25"
-              : "bg-forest-500/20 text-forest-200 hover:bg-forest-500/30"
-          }`}
-        >
-          {t("admin.replyEmail")}
-        </button>
-        <button
-          type="button"
-          disabled={deletingBookings}
-          onClick={() => deleteBookings([booking.id])}
-          className="inline-flex items-center gap-1 rounded-xl border border-red-300/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-500/20 disabled:opacity-50"
-        >
-          <Trash2 size={14} />
-          {t("admin.delete")}
-        </button>
+        {canEditBookings && (
+          <button
+            type="button"
+            onClick={() => openReply(booking)}
+            className={`rounded-xl px-3 py-1.5 text-xs font-bold ${
+              isCancelled
+                ? "bg-red-500/15 text-red-300 hover:bg-red-500/25"
+                : "bg-forest-500/20 text-forest-200 hover:bg-forest-500/30"
+            }`}
+          >
+            {t("admin.replyEmail")}
+          </button>
+        )}
+        {canDeleteBookings && (
+          <button
+            type="button"
+            disabled={deletingBookings}
+            onClick={() => deleteBookings([booking.id])}
+            className="inline-flex items-center gap-1 rounded-xl border border-red-300/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+          >
+            <Trash2 size={14} />
+            {t("admin.delete")}
+          </button>
+        )}
       </div>
     );
   }
@@ -566,7 +575,7 @@ export function AdminBookingsPanel({
               {!loading && ` · ${t("admin.resultsCount", { count: pagination.total })}`}
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              {selectedBookingIds.length > 0 && (
+              {canDeleteBookings && selectedBookingIds.length > 0 && (
                 <button
                   type="button"
                   disabled={deletingBookings}
@@ -635,18 +644,20 @@ export function AdminBookingsPanel({
                         isCancelled ? "border-red-500/20" : ""
                       } ${selectedBookingIds.includes(booking.id) ? "border-forest-400/40 ring-1 ring-forest-400/25" : ""}`}
                     >
-                      <label
-                        className="absolute start-3 top-3 z-10 flex items-center"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedBookingIds.includes(booking.id)}
-                          onChange={() => toggleBookingSelection(booking.id)}
-                          className="h-4 w-4 rounded border-white/20 bg-white/10 text-forest-500 focus:ring-forest-400"
-                          aria-label={t("admin.selectAllOnPage")}
-                        />
-                      </label>
+                      {canDeleteBookings && (
+                        <label
+                          className="absolute start-3 top-3 z-10 flex items-center"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedBookingIds.includes(booking.id)}
+                            onChange={() => toggleBookingSelection(booking.id)}
+                            className="h-4 w-4 rounded border-white/20 bg-white/10 text-forest-500 focus:ring-forest-400"
+                            aria-label={t("admin.selectAllOnPage")}
+                          />
+                        </label>
+                      )}
                       <button
                         type="button"
                         onClick={() => setDetailBooking(booking)}
@@ -698,18 +709,20 @@ export function AdminBookingsPanel({
             <table className="w-full min-w-[980px] text-sm">
               <thead className="text-white/60">
                 <tr>
-                  <th className="w-10 p-3 text-start">
-                    <input
-                      type="checkbox"
-                      checked={allOnPageSelected}
-                      ref={(input) => {
-                        if (input) input.indeterminate = someOnPageSelected && !allOnPageSelected;
-                      }}
-                      onChange={toggleSelectAllOnPage}
-                      className="h-4 w-4 rounded border-white/20 bg-white/10 text-forest-500 focus:ring-forest-400"
-                      aria-label={t("admin.selectAllOnPage")}
-                    />
-                  </th>
+                  {canDeleteBookings && (
+                    <th className="w-10 p-3 text-start">
+                      <input
+                        type="checkbox"
+                        checked={allOnPageSelected}
+                        ref={(input) => {
+                          if (input) input.indeterminate = someOnPageSelected && !allOnPageSelected;
+                        }}
+                        onChange={toggleSelectAllOnPage}
+                        className="h-4 w-4 rounded border-white/20 bg-white/10 text-forest-500 focus:ring-forest-400"
+                        aria-label={t("admin.selectAllOnPage")}
+                      />
+                    </th>
+                  )}
                   <th className="p-3 text-start">{t("booking.bookingNumber")}</th>
                   <th className="p-3 text-start">{t("booking.fullName")}</th>
                   <th className="p-3 text-start">{t("booking.email")}</th>
@@ -742,15 +755,17 @@ export function AdminBookingsPanel({
                         selectedBookingIds.includes(booking.id) ? "bg-forest-500/5" : ""
                       }`}
                     >
-                      <td className="p-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedBookingIds.includes(booking.id)}
-                          onChange={() => toggleBookingSelection(booking.id)}
-                          className="h-4 w-4 rounded border-white/20 bg-white/10 text-forest-500 focus:ring-forest-400"
-                          aria-label={booking.booking_number}
-                        />
-                      </td>
+                      {canDeleteBookings && (
+                        <td className="p-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedBookingIds.includes(booking.id)}
+                            onChange={() => toggleBookingSelection(booking.id)}
+                            className="h-4 w-4 rounded border-white/20 bg-white/10 text-forest-500 focus:ring-forest-400"
+                            aria-label={booking.booking_number}
+                          />
+                        </td>
+                      )}
                       <td className="p-3 font-mono font-bold tracking-wider">
                         <span className="inline-flex items-center gap-2">
                           {isCancelled && (
@@ -823,17 +838,21 @@ export function AdminBookingsPanel({
                       </td>
                       <td className="p-3">{confirmationBadge(booking)}</td>
                       <td className="p-3">
-                        <select
-                          className={`${inputClass} ${isCancelled ? "border-red-500/30 text-red-400" : ""}`}
-                          value={displayStatus(booking.booking_status)}
-                          onChange={(event) => updateStatus(booking.id, event.target.value)}
-                        >
-                          {statuses.map((status) => (
-                            <option key={status} value={status}>
-                              {t(`admin.${status}`)}
-                            </option>
-                          ))}
-                        </select>
+                        {canEditBookings ? (
+                          <select
+                            className={`${inputClass} ${isCancelled ? "border-red-500/30 text-red-400" : ""}`}
+                            value={displayStatus(booking.booking_status)}
+                            onChange={(event) => updateStatus(booking.id, event.target.value)}
+                          >
+                            {statuses.map((status) => (
+                              <option key={status} value={status}>
+                                {t(`admin.${status}`)}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          statusBadge(booking)
+                        )}
                       </td>
                       <td className="p-3">
                         <div className="flex flex-wrap gap-2">
@@ -846,26 +865,30 @@ export function AdminBookingsPanel({
                               {t("admin.viewWaiver")}
                             </button>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => openReply(booking)}
-                            className={`rounded-xl px-3 py-1.5 text-xs font-bold ${
-                              isCancelled
-                                ? "bg-red-500/15 text-red-300 hover:bg-red-500/25"
-                                : "bg-forest-500/20 text-forest-200 hover:bg-forest-500/30"
-                            }`}
-                          >
-                            {t("admin.replyEmail")}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={deletingBookings}
-                            onClick={() => deleteBookings([booking.id])}
-                            className="inline-flex items-center gap-1 rounded-xl border border-red-300/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-500/20 disabled:opacity-50"
-                          >
-                            <Trash2 size={14} />
-                            {t("admin.delete")}
-                          </button>
+                          {canEditBookings && (
+                            <button
+                              type="button"
+                              onClick={() => openReply(booking)}
+                              className={`rounded-xl px-3 py-1.5 text-xs font-bold ${
+                                isCancelled
+                                  ? "bg-red-500/15 text-red-300 hover:bg-red-500/25"
+                                  : "bg-forest-500/20 text-forest-200 hover:bg-forest-500/30"
+                              }`}
+                            >
+                              {t("admin.replyEmail")}
+                            </button>
+                          )}
+                          {canDeleteBookings && (
+                            <button
+                              type="button"
+                              disabled={deletingBookings}
+                              onClick={() => deleteBookings([booking.id])}
+                              className="inline-flex items-center gap-1 rounded-xl border border-red-300/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+                            >
+                              <Trash2 size={14} />
+                              {t("admin.delete")}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -980,33 +1003,37 @@ export function AdminBookingsPanel({
               </p>
             ) : null}
 
-            <label className="mt-6 block space-y-2">
-              <span className="text-sm font-semibold text-white/75">{t("admin.status")}</span>
-              <select
-                className={inputClass}
-                value={displayStatus(detailBooking.booking_status)}
-                onChange={(event) => updateStatus(detailBooking.id, event.target.value)}
-              >
-                {statuses.map((status) => (
-                  <option key={status} value={status}>
-                    {t(`admin.${status}`)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {canEditBookings && (
+              <label className="mt-6 block space-y-2">
+                <span className="text-sm font-semibold text-white/75">{t("admin.status")}</span>
+                <select
+                  className={inputClass}
+                  value={displayStatus(detailBooking.booking_status)}
+                  onChange={(event) => updateStatus(detailBooking.id, event.target.value)}
+                >
+                  {statuses.map((status) => (
+                    <option key={status} value={status}>
+                      {t(`admin.${status}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             {renderBookingActions(detailBooking)}
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <button
-                type="button"
-                disabled={deletingBookings}
-                onClick={() => deleteBookings([detailBooking.id])}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-red-300/30 bg-red-500/15 px-5 py-3 font-bold text-red-200 hover:bg-red-500/25 disabled:opacity-50"
-              >
-                <Trash2 size={18} />
-                {t("admin.deleteBooking")}
-              </button>
+              {canDeleteBookings && (
+                <button
+                  type="button"
+                  disabled={deletingBookings}
+                  onClick={() => deleteBookings([detailBooking.id])}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-red-300/30 bg-red-500/15 px-5 py-3 font-bold text-red-200 hover:bg-red-500/25 disabled:opacity-50"
+                >
+                  <Trash2 size={18} />
+                  {t("admin.deleteBooking")}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setDetailBooking(null)}

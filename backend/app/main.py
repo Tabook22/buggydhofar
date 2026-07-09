@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import extract, func, text
 from sqlalchemy.orm import Session
 
-from . import auth, amwal, booking_archive, booking_lifecycle, booking_numbers, booking_qr, email_service, fleet, media_assets, media_storage, models, pricing, promo_codes, routes_geo, schemas, waiver
+from . import admin_permissions as perm, auth, amwal, booking_archive, booking_lifecycle, booking_numbers, booking_qr, email_service, fleet, media_assets, media_storage, models, pricing, promo_codes, routes_geo, schemas, waiver
 from .database import Base, SessionLocal, engine, get_db
 from .seed import seed_database, seed_payment_transfer_defaults
 
@@ -226,6 +226,20 @@ def ensure_admin_role_column() -> None:
             connection.execute(text("ALTER TABLE admins ADD COLUMN role TEXT DEFAULT 'admin'"))
 
 
+def ensure_admin_permissions_column() -> None:
+    with engine.begin() as connection:
+        existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(admins)"))}
+        if "permissions" not in existing_columns:
+            connection.execute(text("ALTER TABLE admins ADD COLUMN permissions TEXT"))
+
+
+def backfill_primary_super_admin(db: Session) -> None:
+    primary = db.query(models.Admin).filter(models.Admin.username == "admin").first()
+    if primary and primary.role == auth.ROLE_ADMIN:
+        primary.role = perm.ROLE_SUPER_ADMIN
+        db.commit()
+
+
 def backfill_scanner_user(db: Session) -> None:
     from .auth import hash_password
 
@@ -339,6 +353,7 @@ def startup() -> None:
     ensure_booking_waiver_columns()
     ensure_booking_check_in_columns()
     ensure_admin_role_column()
+    ensure_admin_permissions_column()
     ensure_payment_transfer_columns()
     ensure_hero_background_type_column()
     db = SessionLocal()
@@ -365,6 +380,7 @@ def startup() -> None:
         backfill_booking_tax(db)
         backfill_check_in_tokens(db)
         backfill_scanner_user(db)
+        backfill_primary_super_admin(db)
         seed_payment_transfer_defaults(db)
         process_expired_pending_bookings(db)
     finally:
@@ -914,12 +930,99 @@ def admin_login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     role = auth.admin_role(admin)
     if role == auth.ROLE_SCANNER:
         raise HTTPException(status_code=403, detail="Scanner accounts must sign in at the staff portal.")
-    return {
-        "access_token": auth.create_access_token(admin.username, role),
-        "token_type": "bearer",
-        "role": role,
-        "username": admin.username,
-    }
+    if role not in {perm.ROLE_SUPER_ADMIN, perm.ROLE_ADMIN}:
+        raise HTTPException(status_code=403, detail="This account cannot access the admin dashboard.")
+    return perm.auth_token_payload(admin)
+
+
+@app.get("/api/admin/me", response_model=schemas.TokenOut)
+def admin_me(admin: models.Admin = Depends(auth.get_current_admin)):
+    return perm.auth_token_payload(admin)
+
+
+@app.get("/api/admin/users", response_model=list[schemas.AdminUserOut])
+def admin_list_users(
+    _: models.Admin = Depends(perm.require_super_admin()),
+    db: Session = Depends(get_db),
+):
+    users = db.query(models.Admin).filter(models.Admin.role != perm.ROLE_SCANNER).order_by(models.Admin.id).all()
+    return [perm.admin_user_out(user) for user in users]
+
+
+@app.post("/api/admin/users", response_model=schemas.AdminUserOut)
+def admin_create_user(
+    payload: schemas.AdminUserCreate,
+    _: models.Admin = Depends(perm.require_super_admin()),
+    db: Session = Depends(get_db),
+):
+    username = payload.username.strip()
+    if len(username) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters.")
+    if len(payload.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+    if db.query(models.Admin).filter(models.Admin.username == username).first():
+        raise HTTPException(status_code=409, detail="Username already exists.")
+    user = models.Admin(
+        username=username,
+        password_hash=auth.hash_password(payload.password),
+        role=perm.ROLE_ADMIN,
+        permissions=perm.permissions_to_json(payload.permissions.model_dump()),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return perm.admin_user_out(user)
+
+
+@app.patch("/api/admin/users/{user_id}", response_model=schemas.AdminUserOut)
+def admin_update_user(
+    user_id: int,
+    payload: schemas.AdminUserUpdate,
+    current: models.Admin = Depends(perm.require_super_admin()),
+    db: Session = Depends(get_db),
+):
+    user = db.get(models.Admin, user_id)
+    if not user or user.role == perm.ROLE_SCANNER:
+        raise HTTPException(status_code=404, detail="Admin user not found.")
+    if perm.is_super_admin(user) and payload.permissions is not None:
+        raise HTTPException(status_code=400, detail="Super admin permissions cannot be changed here.")
+    if payload.username is not None:
+        username = payload.username.strip()
+        if len(username) < 3:
+            raise HTTPException(status_code=400, detail="Username must be at least 3 characters.")
+        conflict = db.query(models.Admin).filter(models.Admin.username == username, models.Admin.id != user_id).first()
+        if conflict:
+            raise HTTPException(status_code=409, detail="Username already exists.")
+        user.username = username
+    if payload.password:
+        if len(payload.password) < 6:
+            raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+        user.password_hash = auth.hash_password(payload.password)
+    if payload.permissions is not None and not perm.is_super_admin(user):
+        user.permissions = perm.permissions_to_json(payload.permissions.model_dump())
+    db.commit()
+    db.refresh(user)
+    if current.id == user.id and payload.username:
+        pass
+    return perm.admin_user_out(user)
+
+
+@app.delete("/api/admin/users/{user_id}")
+def admin_delete_user(
+    user_id: int,
+    current: models.Admin = Depends(perm.require_super_admin()),
+    db: Session = Depends(get_db),
+):
+    if current.id == user_id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account.")
+    user = db.get(models.Admin, user_id)
+    if not user or user.role == perm.ROLE_SCANNER:
+        raise HTTPException(status_code=404, detail="Admin user not found.")
+    if perm.is_super_admin(user) and perm.count_super_admins(db, exclude_id=user_id) == 0:
+        raise HTTPException(status_code=400, detail="At least one super admin must remain.")
+    db.delete(user)
+    db.commit()
+    return {"deleted": True, "user_id": user_id}
 
 
 @app.post("/api/staff/login", response_model=schemas.TokenOut)
@@ -985,7 +1088,7 @@ def validate_promo_code(payload: schemas.PromoValidateRequest, db: Session = Dep
 @app.get("/api/admin/media-assets", response_model=list[schemas.MediaAssetOut])
 def admin_list_media_assets(
     category: str | None = None,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("content", "view")),
     db: Session = Depends(get_db),
 ):
     query = db.query(models.MediaAsset)
@@ -1001,7 +1104,7 @@ def admin_list_media_assets(
 @app.post("/api/admin/media-assets", response_model=schemas.MediaAssetOut)
 def admin_create_media_asset(
     payload: schemas.MediaAssetCreate,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("content", "create")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -1040,7 +1143,7 @@ def admin_create_media_asset(
 def admin_update_media_asset(
     asset_id: int,
     payload: schemas.MediaAssetUpdate,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("content", "edit")),
     db: Session = Depends(get_db),
 ):
     asset = db.get(models.MediaAsset, asset_id)
@@ -1087,7 +1190,7 @@ def admin_update_media_asset(
 @app.delete("/api/admin/media-assets/{asset_id}")
 def admin_delete_media_asset(
     asset_id: int,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("content", "delete")),
     db: Session = Depends(get_db),
 ):
     asset = db.get(models.MediaAsset, asset_id)
@@ -1103,14 +1206,14 @@ def admin_delete_media_asset(
 
 
 @app.get("/api/admin/promo-codes", response_model=list[schemas.PromoCodeOut])
-def admin_list_promo_codes(_: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+def admin_list_promo_codes(_: models.Admin = Depends(perm.require_permission("promo", "view")), db: Session = Depends(get_db)):
     return db.query(models.PromoCode).order_by(models.PromoCode.created_at.desc()).all()
 
 
 @app.post("/api/admin/promo-codes", response_model=schemas.PromoCodeOut)
 def admin_create_promo_code(
     payload: schemas.PromoCodeCreate,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("promo", "create")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -1153,7 +1256,7 @@ def admin_create_promo_code(
 def admin_update_promo_code(
     promo_id: int,
     payload: schemas.PromoCodeUpdate,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("promo", "edit")),
     db: Session = Depends(get_db),
 ):
     promo = db.get(models.PromoCode, promo_id)
@@ -1194,7 +1297,7 @@ def admin_update_promo_code(
 @app.delete("/api/admin/promo-codes/{promo_id}")
 def admin_delete_promo_code(
     promo_id: int,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("promo", "delete")),
     db: Session = Depends(get_db),
 ):
     promo = db.get(models.PromoCode, promo_id)
@@ -1214,7 +1317,7 @@ def admin_bookings(
     year: int | None = None,
     month: int | None = None,
     day: int | None = None,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("bookings", "view")),
     db: Session = Depends(get_db),
 ):
     process_expired_pending_bookings(db)
@@ -1223,7 +1326,7 @@ def admin_bookings(
 
 
 @app.get("/api/admin/bookings/archive", response_model=schemas.BookingArchiveOut)
-def admin_bookings_archive(_: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+def admin_bookings_archive(_: models.Admin = Depends(perm.require_permission("bookings", "view")), db: Session = Depends(get_db)):
     process_expired_pending_bookings(db)
     return booking_archive.build_booking_archive(db)
 
@@ -1243,7 +1346,7 @@ def delete_booking_record(db: Session, booking_id: int) -> bool:
 @app.post("/api/admin/bookings/bulk-delete")
 def admin_delete_bookings_bulk(
     payload: schemas.BookingBulkDelete,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("bookings", "delete")),
     db: Session = Depends(get_db),
 ):
     ids = list(dict.fromkeys(payload.ids))
@@ -1267,7 +1370,7 @@ def admin_delete_bookings_bulk(
 @app.delete("/api/admin/bookings/{booking_id}")
 def admin_delete_booking(
     booking_id: int,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("bookings", "delete")),
     db: Session = Depends(get_db),
 ):
     if not delete_booking_record(db, booking_id):
@@ -1283,7 +1386,7 @@ def admin_delete_booking(
 @app.get("/api/admin/bookings/{booking_id}/waiver", response_model=schemas.BookingWaiverOut)
 def admin_booking_waiver(
     booking_id: int,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("bookings", "view")),
     db: Session = Depends(get_db),
 ):
     booking = db.get(models.Booking, booking_id)
@@ -1304,7 +1407,7 @@ def admin_booking_waiver(
 @app.get("/api/admin/bookings/{booking_id}/emails", response_model=list[schemas.BookingEmailLogOut])
 def admin_booking_emails(
     booking_id: int,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("bookings", "view")),
     db: Session = Depends(get_db),
 ):
     booking = db.get(models.Booking, booking_id)
@@ -1322,7 +1425,7 @@ def admin_booking_emails(
 def admin_reply_to_booking(
     booking_id: int,
     payload: schemas.AdminEmailReply,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("bookings", "edit")),
     db: Session = Depends(get_db),
 ):
     booking = db.get(models.Booking, booking_id)
@@ -1348,12 +1451,12 @@ def admin_reply_to_booking(
 
 
 @app.get("/api/admin/vehicles", response_model=list[schemas.VehicleOut])
-def admin_vehicles(_: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+def admin_vehicles(_: models.Admin = Depends(perm.require_permission("vehicles", "view")), db: Session = Depends(get_db)):
     return db.query(models.Vehicle).order_by(models.Vehicle.id).all()
 
 
 @app.get("/api/admin/routes", response_model=list[schemas.RouteOut])
-def admin_routes(_: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+def admin_routes(_: models.Admin = Depends(perm.require_permission("paths", "view")), db: Session = Depends(get_db)):
     return db.query(models.Route).order_by(models.Route.id).all()
 
 
@@ -1361,23 +1464,30 @@ def admin_routes(_: models.Admin = Depends(auth.get_current_admin), db: Session 
 async def admin_upload_media(
     media_kind: str = "image",
     file: UploadFile = File(...),
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("content", "create")),
 ):
     return await media_storage.save_upload(file, media_kind)
 
 
 @app.get("/api/admin/site-content", response_model=schemas.SiteContentOut)
-def admin_site_content(_: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+def admin_site_content(
+    _: models.Admin = Depends(perm.require_any_permission(("content", "transfer"), "view")),
+    db: Session = Depends(get_db),
+):
     return get_site_content(db)
 
 
 @app.put("/api/admin/site-content", response_model=schemas.SiteContentOut)
 def update_site_content(
     payload: schemas.SiteContentBase,
-    _: models.Admin = Depends(auth.get_current_admin),
+    admin: models.Admin = Depends(auth.get_current_admin),
     db: Session = Depends(get_db),
 ):
-    data = payload.model_dump()
+    if not perm.can_edit_site_content(admin):
+        raise HTTPException(status_code=403, detail="You do not have permission to edit site content.")
+    data = perm.filter_site_content_payload(admin, payload.model_dump())
+    if not data:
+        raise HTTPException(status_code=403, detail="You do not have permission to edit these settings.")
     bg_type = str(data.get("hero_background_type", "image")).strip().lower()
     data["hero_background_type"] = "video" if bg_type == "video" else "image"
 
@@ -1402,7 +1512,7 @@ def update_booking_status(
     booking_id: int,
     payload: schemas.BookingStatusUpdate,
     background_tasks: BackgroundTasks,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("bookings", "edit")),
     db: Session = Depends(get_db),
 ):
     if payload.booking_status not in booking_lifecycle.BOOKING_STATUSES:
@@ -1427,7 +1537,14 @@ def update_booking_status(
     elif previous_status != "cancelled" and booking.booking_status == "cancelled":
         background_tasks.add_task(email_service.send_booking_cancelled_task, booking.id)
     return booking_to_out(booking, db)
-def create_vehicle(payload: schemas.VehicleCreate, _: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+
+
+@app.post("/api/admin/vehicles", response_model=schemas.VehicleOut)
+def create_vehicle(
+    payload: schemas.VehicleCreate,
+    _: models.Admin = Depends(perm.require_permission("vehicles", "create")),
+    db: Session = Depends(get_db),
+):
     vehicle = models.Vehicle(**payload.model_dump())
     db.add(vehicle)
     db.commit()
@@ -1436,7 +1553,12 @@ def create_vehicle(payload: schemas.VehicleCreate, _: models.Admin = Depends(aut
 
 
 @app.put("/api/admin/vehicles/{vehicle_id}", response_model=schemas.VehicleOut)
-def update_vehicle(vehicle_id: int, payload: schemas.VehicleCreate, _: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+def update_vehicle(
+    vehicle_id: int,
+    payload: schemas.VehicleCreate,
+    _: models.Admin = Depends(perm.require_permission("vehicles", "edit")),
+    db: Session = Depends(get_db),
+):
     vehicle = db.get(models.Vehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
@@ -1448,7 +1570,11 @@ def update_vehicle(vehicle_id: int, payload: schemas.VehicleCreate, _: models.Ad
 
 
 @app.delete("/api/admin/vehicles/{vehicle_id}")
-def delete_vehicle(vehicle_id: int, _: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+def delete_vehicle(
+    vehicle_id: int,
+    _: models.Admin = Depends(perm.require_permission("vehicles", "delete")),
+    db: Session = Depends(get_db),
+):
     vehicle = db.get(models.Vehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
@@ -1458,7 +1584,11 @@ def delete_vehicle(vehicle_id: int, _: models.Admin = Depends(auth.get_current_a
 
 
 @app.post("/api/admin/routes", response_model=schemas.RouteOut)
-def create_route(payload: schemas.RouteCreate, _: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+def create_route(
+    payload: schemas.RouteCreate,
+    _: models.Admin = Depends(perm.require_permission("paths", "create")),
+    db: Session = Depends(get_db),
+):
     route_data = routes_geo.normalize_route_payload(payload.model_dump())
     route = models.Route(**route_data)
     db.add(route)
@@ -1468,7 +1598,12 @@ def create_route(payload: schemas.RouteCreate, _: models.Admin = Depends(auth.ge
 
 
 @app.put("/api/admin/routes/{route_id}", response_model=schemas.RouteOut)
-def update_route(route_id: int, payload: schemas.RouteCreate, _: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+def update_route(
+    route_id: int,
+    payload: schemas.RouteCreate,
+    _: models.Admin = Depends(perm.require_permission("paths", "edit")),
+    db: Session = Depends(get_db),
+):
     route = db.get(models.Route, route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Route not found")
@@ -1481,7 +1616,11 @@ def update_route(route_id: int, payload: schemas.RouteCreate, _: models.Admin = 
 
 
 @app.delete("/api/admin/routes/{route_id}")
-def delete_route(route_id: int, _: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+def delete_route(
+    route_id: int,
+    _: models.Admin = Depends(perm.require_permission("paths", "delete")),
+    db: Session = Depends(get_db),
+):
     route = db.get(models.Route, route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Route not found")
@@ -1497,7 +1636,7 @@ def delete_route(route_id: int, _: models.Admin = Depends(auth.get_current_admin
 
 
 @app.delete("/api/admin/routes")
-def delete_all_routes(_: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+def delete_all_routes(_: models.Admin = Depends(perm.require_permission("paths", "delete")), db: Session = Depends(get_db)):
     """Remove every path so the admin can start fresh. Linked bookings are removed too."""
     db.query(models.Booking).delete()
     deleted = db.query(models.Route).delete()
@@ -1509,7 +1648,7 @@ def delete_all_routes(_: models.Admin = Depends(auth.get_current_admin), db: Ses
 def update_route_display(
     route_id: int,
     payload: schemas.RouteDisplayUpdate,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("paths", "edit")),
     db: Session = Depends(get_db),
 ):
     route = db.get(models.Route, route_id)
@@ -1522,14 +1661,14 @@ def update_route_display(
 
 
 @app.get("/api/admin/fleet", response_model=list[schemas.FleetUnitOut])
-def admin_fleet(_: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+def admin_fleet(_: models.Admin = Depends(perm.require_permission("fleet", "view")), db: Session = Depends(get_db)):
     return db.query(models.FleetUnit).order_by(models.FleetUnit.unit_number).all()
 
 
 @app.post("/api/admin/fleet", response_model=schemas.FleetUnitOut)
 def create_fleet_unit(
     payload: schemas.FleetUnitCreate,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("fleet", "create")),
     db: Session = Depends(get_db),
 ):
     existing = db.query(models.FleetUnit).filter(models.FleetUnit.unit_number == payload.unit_number).first()
@@ -1546,7 +1685,7 @@ def create_fleet_unit(
 def update_fleet_unit(
     unit_id: int,
     payload: schemas.FleetUnitCreate,
-    _: models.Admin = Depends(auth.get_current_admin),
+    _: models.Admin = Depends(perm.require_permission("fleet", "edit")),
     db: Session = Depends(get_db),
 ):
     unit = db.get(models.FleetUnit, unit_id)
@@ -1567,7 +1706,11 @@ def update_fleet_unit(
 
 
 @app.delete("/api/admin/fleet/{unit_id}")
-def delete_fleet_unit(unit_id: int, _: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+def delete_fleet_unit(
+    unit_id: int,
+    _: models.Admin = Depends(perm.require_permission("fleet", "delete")),
+    db: Session = Depends(get_db),
+):
     unit = db.get(models.FleetUnit, unit_id)
     if not unit:
         raise HTTPException(status_code=404, detail="Fleet unit not found")
@@ -1598,7 +1741,7 @@ def delete_fleet_unit(unit_id: int, _: models.Admin = Depends(auth.get_current_a
 
 
 @app.get("/api/admin/dashboard-stats", response_model=schemas.DashboardStats)
-def dashboard_stats(_: models.Admin = Depends(auth.get_current_admin), db: Session = Depends(get_db)):
+def dashboard_stats(_: models.Admin = Depends(perm.require_permission("overview", "view")), db: Session = Depends(get_db)):
     process_expired_pending_bookings(db)
     today = date.today().isoformat()
     active_filter = models.Booking.booking_status.in_(booking_lifecycle.COUNTED_BOOKING_STATUSES)

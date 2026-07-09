@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { LucideIcon } from "lucide-react";
-import { Bike, Building2, CalendarDays, Car, FileText, LayoutDashboard, Map, Tag } from "lucide-react";
+import { Bike, Building2, CalendarDays, Car, FileText, LayoutDashboard, Map, Shield, Tag } from "lucide-react";
 import { api, clearAdminToken, FleetUnit, isAdminAuthError, RouteExperience, SiteContent, Vehicle } from "../api/client";
 import { RealMapPathPicker, RealMapRoutePreview } from "../components/RealMapRoute";
 import { AdminBookingsPanel } from "../components/AdminBookingsPanel";
@@ -10,6 +10,17 @@ import { AdminMediaField } from "../components/AdminMediaField";
 import { AdminMediaLibrary } from "../components/AdminMediaLibrary";
 import { AdminPromoCodes } from "../components/AdminPromoCodes";
 import { AdminTransferSettings, defaultTransferSettings } from "../components/AdminTransferSettings";
+import { AdminUsersPanel } from "../components/AdminUsersPanel";
+import {
+  AdminSession,
+  can,
+  canViewTab,
+  clearAdminSession,
+  isSuperAdminSession,
+  loadAdminSession,
+  saveAdminSession,
+  sessionFromAuth,
+} from "../lib/adminPermissions";
 
 type Stats = {
   total_revenue: number;
@@ -127,7 +138,8 @@ const ADMIN_TABS = [
   { id: "content", labelKey: "admin.tabContent", icon: FileText },
   { id: "fleet", labelKey: "admin.tabFleet", icon: Bike },
   { id: "paths", labelKey: "admin.tabPaths", icon: Map },
-  { id: "vehicles", labelKey: "admin.vehicles", icon: Car }
+  { id: "vehicles", labelKey: "admin.vehicles", icon: Car },
+  { id: "users", labelKey: "admin.tabUsers", icon: Shield }
 ] as const satisfies ReadonlyArray<{ id: string; labelKey: string; icon: LucideIcon }>;
 
 type AdminTabId = (typeof ADMIN_TABS)[number]["id"];
@@ -200,6 +212,9 @@ export default function AdminDashboard() {
   const [transferMessage, setTransferMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [fleetMessage, setFleetMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [activeTab, setActiveTab] = useState<AdminTabId>(readStoredAdminTab);
+  const [adminSession, setAdminSession] = useState<AdminSession | null>(() => loadAdminSession());
+
+  const visibleTabs = ADMIN_TABS.filter((tab) => canViewTab(adminSession, tab.id));
 
   function selectTab(tabId: AdminTabId) {
     setActiveTab(tabId);
@@ -212,27 +227,64 @@ export default function AdminDashboard() {
 
   function handleAuthFailure(message?: string) {
     clearAdminToken();
+    clearAdminSession();
+    setAdminSession(null);
     setToken("");
     setLoginMessage(message || t("admin.sessionExpired"));
   }
 
-  async function loadAdminData(authToken = token) {
-    if (!authToken) return null;
+  async function loadAdminData(authToken = token, session = adminSession) {
+    if (!authToken || !session) return null;
     try {
-      const [statsData, vehicleData, routeData, fleetData, contentData] = await Promise.all([
-        api.adminGet<Stats>("/api/admin/dashboard-stats", authToken),
-        api.adminGet<Vehicle[]>("/api/admin/vehicles", authToken),
-        api.adminGet<RouteExperience[]>("/api/admin/routes", authToken),
-        api.adminGet<FleetUnit[]>("/api/admin/fleet", authToken),
-        api.adminGet<SiteContent>("/api/admin/site-content", authToken)
-      ]);
-      setStats(statsData);
-      setVehicles(vehicleData);
-      setRoutes(routeData);
-      setFleetUnits(fleetData);
-      const { id: _id, ...editableContent } = contentData;
-      setSiteContentForm({ ...emptySiteContent, ...editableContent });
-      return fleetData;
+      const tasks: Promise<void>[] = [];
+      let latestFleet: FleetUnit[] | null = null;
+      if (can(session, "overview", "view")) {
+        tasks.push(
+          api.adminGet<Stats>("/api/admin/dashboard-stats", authToken).then((statsData) => {
+            setStats(statsData);
+          })
+        );
+      } else {
+        setStats(null);
+      }
+      if (can(session, "vehicles", "view")) {
+        tasks.push(
+          api.adminGet<Vehicle[]>("/api/admin/vehicles", authToken).then((vehicleData) => {
+            setVehicles(vehicleData);
+          })
+        );
+      } else {
+        setVehicles([]);
+      }
+      if (can(session, "paths", "view")) {
+        tasks.push(
+          api.adminGet<RouteExperience[]>("/api/admin/routes", authToken).then((routeData) => {
+            setRoutes(routeData);
+          })
+        );
+      } else {
+        setRoutes([]);
+      }
+      if (can(session, "fleet", "view")) {
+        tasks.push(
+          api.adminGet<FleetUnit[]>("/api/admin/fleet", authToken).then((fleetData) => {
+            setFleetUnits(fleetData);
+            latestFleet = fleetData;
+          })
+        );
+      } else {
+        setFleetUnits([]);
+      }
+      if (can(session, "content", "view") || can(session, "transfer", "view")) {
+        tasks.push(
+          api.adminGet<SiteContent>("/api/admin/site-content", authToken).then((contentData) => {
+            const { id: _id, ...editableContent } = contentData;
+            setSiteContentForm({ ...emptySiteContent, ...editableContent });
+          })
+        );
+      }
+      await Promise.all(tasks);
+      return latestFleet;
     } catch (error) {
       const message = error instanceof Error ? error.message : t("admin.pathSaveError");
       if (isAdminAuthError(message)) {
@@ -244,8 +296,21 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (!token) return;
-    loadAdminData().catch(() => undefined);
+    api.adminGet<import("../api/client").AuthTokenResponse>("/api/admin/me", token)
+      .then((me) => {
+        const session = sessionFromAuth(me);
+        saveAdminSession(session);
+        setAdminSession(session);
+        return loadAdminData(token, session);
+      })
+      .catch(() => handleAuthFailure());
   }, []);
+
+  useEffect(() => {
+    if (!adminSession || canViewTab(adminSession, activeTab)) return;
+    const fallback = visibleTabs[0]?.id as AdminTabId | undefined;
+    if (fallback) selectTab(fallback);
+  }, [adminSession, activeTab, visibleTabs]);
 
   useEffect(() => {
     if (!lastSavedPath) return;
@@ -263,9 +328,14 @@ export default function AdminDashboard() {
         setLoginMessage(t("staff.useStaffPortal"));
         return;
       }
+      const session = sessionFromAuth(response);
       localStorage.setItem("khareef-admin-token", response.access_token);
+      saveAdminSession(session);
+      setAdminSession(session);
       setToken(response.access_token);
-      await loadAdminData(response.access_token);
+      const firstTab = ADMIN_TABS.find((tab) => canViewTab(session, tab.id))?.id || "overview";
+      setActiveTab(firstTab as AdminTabId);
+      await loadAdminData(response.access_token, session);
     } catch (error) {
       setLoginMessage(error instanceof Error ? error.message : t("admin.loginFailed"));
     }
@@ -532,10 +602,18 @@ export default function AdminDashboard() {
           <div>
             <h1 className="text-4xl font-black">{t("admin.dashboard")}</h1>
             <p className="mt-2 text-white/60">{t("admin.dashboardSubtitle")}</p>
+            {adminSession && (
+              <p className="mt-1 text-sm text-white/45">
+                {t("admin.signedInAs", { username: adminSession.username })}
+                {isSuperAdminSession(adminSession) ? ` · ${t("admin.superAdmin")}` : ""}
+              </p>
+            )}
           </div>
           <button
             onClick={() => {
               clearAdminToken();
+              clearAdminSession();
+              setAdminSession(null);
               setToken("");
               setLoginMessage(null);
             }}
@@ -547,7 +625,7 @@ export default function AdminDashboard() {
 
         <nav className="mt-6 -mx-4 overflow-x-auto px-4 lg:mx-0 lg:px-0" aria-label={t("admin.dashboard")}>
           <div className="flex min-w-max gap-1.5 rounded-2xl border border-white/10 bg-black/25 p-1.5">
-            {ADMIN_TABS.map(({ id, labelKey, icon: Icon }) => (
+            {visibleTabs.map(({ id, labelKey, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
@@ -615,13 +693,13 @@ export default function AdminDashboard() {
         {activeTab === "bookings" && (
         <div className="mt-6 space-y-6">
         <AdminBookingLinkQr embedded />
-        <AdminBookingsPanel token={token} onAuthFailure={handleAuthFailure} embedded />
+        <AdminBookingsPanel token={token} onAuthFailure={handleAuthFailure} permissions={adminSession} embedded />
         </div>
         )}
 
         {activeTab === "promo" && (
         <div className="mt-6">
-        <AdminPromoCodes token={token} onAuthFailure={handleAuthFailure} embedded />
+        <AdminPromoCodes token={token} onAuthFailure={handleAuthFailure} permissions={adminSession} embedded />
         </div>
         )}
 
@@ -631,8 +709,10 @@ export default function AdminDashboard() {
           embedded
           form={siteContentForm}
           message={transferMessage}
+          readOnly={!can(adminSession, "transfer", "edit")}
           onChange={(transfer) => setSiteContentForm((prev) => ({ ...prev, ...transfer }))}
           onSave={async (_event, transferForm) => {
+            if (!can(adminSession, "transfer", "edit")) return;
             setTransferMessage(null);
             try {
               const payload = {
@@ -668,7 +748,7 @@ export default function AdminDashboard() {
               View Home Page
             </a>
           </div>
-          <form onSubmit={saveSiteContent} className="mt-6 grid gap-4">
+          <form onSubmit={saveSiteContent} className={`mt-6 grid gap-4 ${!can(adminSession, "content", "edit") ? "pointer-events-none opacity-60" : ""}`}>
             <div className="grid gap-4 lg:grid-cols-2">
               <input className={inputClass} placeholder="Hero badge EN" value={siteContentForm.hero_badge_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_badge_en: event.target.value })} />
               <input className={inputClass} placeholder="Hero badge AR" value={siteContentForm.hero_badge_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_badge_ar: event.target.value })} />
@@ -746,10 +826,12 @@ export default function AdminDashboard() {
               <input className={inputClass} placeholder="Why section title EN" value={siteContentForm.why_title_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, why_title_en: event.target.value })} />
               <input className={inputClass} placeholder="Why section title AR" value={siteContentForm.why_title_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, why_title_ar: event.target.value })} />
             </div>
-            <button className="w-fit rounded-2xl bg-forest-500 px-6 py-3 font-bold text-white">Save Main Page Content</button>
+            {can(adminSession, "content", "edit") && (
+              <button className="w-fit rounded-2xl bg-forest-500 px-6 py-3 font-bold text-white">Save Main Page Content</button>
+            )}
           </form>
         </section>
-        <AdminMediaLibrary token={token} onAuthFailure={handleAuthFailure} embedded />
+        <AdminMediaLibrary token={token} onAuthFailure={handleAuthFailure} permissions={adminSession} embedded />
         </div>
         )}
 
@@ -762,6 +844,7 @@ export default function AdminDashboard() {
               {fleetMessage.text}
             </p>
           )}
+          {(can(adminSession, "fleet", "create") || can(adminSession, "fleet", "edit")) && (
           <form onSubmit={saveFleetUnit} className="mt-5 grid gap-3 md:grid-cols-4">
             <input className={inputClass} type="number" min={1} placeholder="Unit #" value={fleetForm.unit_number} onChange={(event) => setFleetForm({ ...fleetForm, unit_number: Number(event.target.value) })} />
             <input className={inputClass} placeholder="Name EN" value={fleetForm.name_en} onChange={(event) => setFleetForm({ ...fleetForm, name_en: event.target.value })} />
@@ -779,6 +862,7 @@ export default function AdminDashboard() {
               )}
             </div>
           </form>
+          )}
           <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {fleetUnits.map((unit) => (
               <div key={unit.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white/5 p-3">
@@ -787,8 +871,12 @@ export default function AdminDashboard() {
                   {!unit.is_active && <span className="ms-2 rounded-full bg-yellow-500/20 px-2 py-1 text-xs text-yellow-200">Inactive</span>}
                 </span>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => { setEditingFleetId(unit.id); setFleetForm({ unit_number: unit.unit_number, name_en: unit.name_en, name_ar: unit.name_ar, is_active: unit.is_active }); setFleetMessage(null); }} className="text-forest-400">{t("admin.edit")}</button>
-                  <button type="button" onClick={() => deleteFleetUnit(unit)} className="text-red-300">{t("admin.delete")}</button>
+                  {can(adminSession, "fleet", "edit") && (
+                    <button type="button" onClick={() => { setEditingFleetId(unit.id); setFleetForm({ unit_number: unit.unit_number, name_en: unit.name_en, name_ar: unit.name_ar, is_active: unit.is_active }); setFleetMessage(null); }} className="text-forest-400">{t("admin.edit")}</button>
+                  )}
+                  {can(adminSession, "fleet", "delete") && (
+                    <button type="button" onClick={() => deleteFleetUnit(unit)} className="text-red-300">{t("admin.delete")}</button>
+                  )}
                 </div>
               </div>
             ))}
@@ -805,14 +893,16 @@ export default function AdminDashboard() {
               <p className="mt-2 max-w-3xl text-sm text-white/60">{t("admin.pathsSubtitle")}</p>
             </div>
             <div className="flex flex-wrap gap-3">
-              {routes.length > 0 && (
+              {can(adminSession, "paths", "delete") && routes.length > 0 && (
                 <button type="button" onClick={deleteAllRoutes} className="rounded-2xl border border-red-300/30 px-5 py-3 font-bold text-red-200 hover:bg-red-500/10">
                   {t("admin.deleteAllPaths")}
                 </button>
               )}
-              <button type="button" onClick={startAddRoute} className="rounded-2xl bg-forest-500 px-5 py-3 font-bold text-white shadow-glow">
-                {t("admin.addPath")}
-              </button>
+              {can(adminSession, "paths", "create") && (
+                <button type="button" onClick={startAddRoute} className="rounded-2xl bg-forest-500 px-5 py-3 font-bold text-white shadow-glow">
+                  {t("admin.addPath")}
+                </button>
+              )}
             </div>
           </div>
 
@@ -898,6 +988,7 @@ export default function AdminDashboard() {
                           <input
                             type="checkbox"
                             checked={route.display_on_home}
+                            disabled={!can(adminSession, "paths", "edit")}
                             onChange={(event) => toggleRouteDisplay(route, event.target.checked)}
                           />
                           {route.display_on_home ? t("admin.visible") : t("admin.hidden")}
@@ -908,12 +999,16 @@ export default function AdminDashboard() {
                           <button type="button" onClick={() => startViewRoute(route.id)} className="rounded-full border border-white/10 px-3 py-1 text-xs font-bold text-white/80 hover:bg-white/10">
                             {t("admin.view")}
                           </button>
-                          <button type="button" onClick={() => startEditRoute(route)} className="rounded-full border border-forest-400/30 px-3 py-1 text-xs font-bold text-forest-300 hover:bg-forest-500/10">
-                            {t("admin.edit")}
-                          </button>
-                          <button type="button" onClick={() => deleteRoute(route)} className="rounded-full border border-red-300/30 px-3 py-1 text-xs font-bold text-red-200 hover:bg-red-500/10">
-                            {t("admin.delete")}
-                          </button>
+                          {can(adminSession, "paths", "edit") && (
+                            <button type="button" onClick={() => startEditRoute(route)} className="rounded-full border border-forest-400/30 px-3 py-1 text-xs font-bold text-forest-300 hover:bg-forest-500/10">
+                              {t("admin.edit")}
+                            </button>
+                          )}
+                          {can(adminSession, "paths", "delete") && (
+                            <button type="button" onClick={() => deleteRoute(route)} className="rounded-full border border-red-300/30 px-3 py-1 text-xs font-bold text-red-200 hover:bg-red-500/10">
+                              {t("admin.delete")}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -942,7 +1037,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {routeFormOpen && (
+          {routeFormOpen && can(adminSession, "paths", editingRouteId ? "edit" : "create") && (
             <div className="mt-6 rounded-2xl border border-forest-400/20 bg-forest-500/5 p-5">
               <h3 className="text-xl font-black">{editingRouteId ? t("admin.editPath") : t("admin.addPath")}</h3>
               {routeMessage && (
@@ -1007,9 +1102,16 @@ export default function AdminDashboard() {
         </section>
         )}
 
+        {activeTab === "users" && isSuperAdminSession(adminSession) && (
+        <div className="mt-6">
+        <AdminUsersPanel token={token} onAuthFailure={handleAuthFailure} embedded />
+        </div>
+        )}
+
         {activeTab === "vehicles" && (
         <section className="mt-6 rounded-[2rem] bg-white/5 p-6">
           <h2 className="text-2xl font-black">{editingVehicleId ? "Edit Vehicle" : t("admin.addVehicle")}</h2>
+            {(can(adminSession, "vehicles", "create") || can(adminSession, "vehicles", "edit")) && (
             <form onSubmit={saveVehicle} className="mt-5 grid gap-3">
               <input className={inputClass} placeholder="Name EN" value={vehicleForm.name_en} onChange={(event) => setVehicleForm({ ...vehicleForm, name_en: event.target.value })} />
               <input className={inputClass} placeholder="Name AR" value={vehicleForm.name_ar} onChange={(event) => setVehicleForm({ ...vehicleForm, name_ar: event.target.value })} />
@@ -1038,6 +1140,7 @@ export default function AdminDashboard() {
                 )}
               </div>
             </form>
+            )}
             <div className="mt-5 space-y-2">
               {vehicles.map((vehicle) => (
                 <div key={vehicle.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white/5 p-3">
@@ -1046,8 +1149,12 @@ export default function AdminDashboard() {
                     {!vehicle.display_on_home && <span className="ms-2 rounded-full bg-yellow-500/20 px-2 py-1 text-xs text-yellow-200">Hidden</span>}
                   </span>
                   <div className="flex gap-3">
-                    <button onClick={() => { setEditingVehicleId(vehicle.id); setVehicleForm(vehicle); }} className="text-forest-400">Edit</button>
-                    <button onClick={() => deleteItem(`/api/admin/vehicles/${vehicle.id}`)} className="text-red-300">{t("admin.delete")}</button>
+                    {can(adminSession, "vehicles", "edit") && (
+                      <button onClick={() => { setEditingVehicleId(vehicle.id); setVehicleForm(vehicle); }} className="text-forest-400">Edit</button>
+                    )}
+                    {can(adminSession, "vehicles", "delete") && (
+                      <button onClick={() => deleteItem(`/api/admin/vehicles/${vehicle.id}`)} className="text-red-300">{t("admin.delete")}</button>
+                    )}
                   </div>
                 </div>
               ))}

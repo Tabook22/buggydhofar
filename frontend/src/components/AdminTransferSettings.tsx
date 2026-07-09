@@ -68,12 +68,14 @@ export function AdminTransferSettings({
   onChange,
   onSave,
   message,
+  readOnly = false,
   embedded = false
 }: {
   form: TransferSettingsForm;
   onChange: (next: TransferSettingsForm) => void;
   onSave: (event: FormEvent, form: TransferSettingsForm) => Promise<void>;
   message?: { type: "success" | "error"; text: string } | null;
+  readOnly?: boolean;
   embedded?: boolean;
 }) {
   const { t } = useTranslation();
@@ -112,7 +114,10 @@ export function AdminTransferSettings({
         <h2 className="text-2xl font-black">{t("admin.transferSettingsTitle")}</h2>
         <p className="mt-2 text-sm text-white/60">{t("admin.transferSettingsHelp")}</p>
       </div>
-      <form onSubmit={(event) => onSave(event, form)} className="mt-6 space-y-4">
+      <form
+        onSubmit={(event) => onSave(event, form)}
+        className={`mt-6 space-y-4 ${readOnly ? "pointer-events-none opacity-60" : ""}`}
+      >
         {message && (
           <p
             className={`rounded-2xl px-4 py-3 text-sm font-semibold ${
@@ -182,9 +187,11 @@ export function AdminTransferSettings({
           </div>
         </FieldBlock>
 
-        <button type="submit" className="w-fit rounded-2xl bg-forest-500 px-6 py-3 font-bold text-white">
-          {t("admin.transferSave")}
-        </button>
+        {!readOnly && (
+          <button type="submit" className="w-fit rounded-2xl bg-forest-500 px-6 py-3 font-bold text-white">
+            {t("admin.transferSave")}
+          </button>
+        )}
       </form>
     </section>
   );

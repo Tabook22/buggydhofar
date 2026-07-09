@@ -17,6 +17,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("KHAREEF_TOKEN_HOURS", "168"))
 bearer_scheme = HTTPBearer()
 
+ROLE_SUPER_ADMIN = "super_admin"
 ROLE_ADMIN = "admin"
 ROLE_SCANNER = "scanner"
 
@@ -43,6 +44,8 @@ def verify_password(password: str, password_hash: str) -> bool:
 def normalize_role(role: str | None) -> str:
     if role == ROLE_SCANNER:
         return ROLE_SCANNER
+    if role == ROLE_SUPER_ADMIN:
+        return ROLE_SUPER_ADMIN
     return ROLE_ADMIN
 
 
@@ -79,10 +82,16 @@ def get_current_admin(
     db: Session = Depends(get_db),
 ) -> models.Admin:
     admin = _get_admin_from_token(credentials, db)
-    if admin_role(admin) == ROLE_SCANNER:
+    role = admin_role(admin)
+    if role == ROLE_SCANNER:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Scanner accounts must sign in at the staff portal.",
+        )
+    if role not in {ROLE_SUPER_ADMIN, ROLE_ADMIN}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account cannot access the admin dashboard.",
         )
     return admin
 

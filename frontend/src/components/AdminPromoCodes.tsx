@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCw, Tag, Trash2 } from "lucide-react";
 import { api, isAdminAuthError, PromoCode } from "../api/client";
+import { AdminSession, can } from "../lib/adminPermissions";
 
 const inputClass = "w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-white outline-none focus:border-forest-400";
 
@@ -33,12 +34,17 @@ function formatDiscount(promo: PromoCode) {
 export function AdminPromoCodes({
   token,
   onAuthFailure,
+  permissions = null,
   embedded = false
 }: {
   token: string;
   onAuthFailure: (message?: string) => void;
+  permissions?: AdminSession | null;
   embedded?: boolean;
 }) {
+  const canCreate = can(permissions, "promo", "create");
+  const canEdit = can(permissions, "promo", "edit");
+  const canDelete = can(permissions, "promo", "delete");
   const { t } = useTranslation();
   const [promos, setPromos] = useState<PromoCode[]>([]);
   const [form, setForm] = useState<PromoForm>(emptyForm);
@@ -128,6 +134,7 @@ export function AdminPromoCodes({
         </div>
       </div>
 
+      {canCreate && (
       <form onSubmit={submitPromo} className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
         <h3 className="text-lg font-bold">{t("admin.promoCreateTitle")}</h3>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -207,6 +214,7 @@ export function AdminPromoCodes({
           {saving ? t("admin.sending") : t("admin.promoCreate")}
         </button>
       </form>
+      )}
 
       {status && <p className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-forest-200">{status}</p>}
 
@@ -249,21 +257,25 @@ export function AdminPromoCodes({
                   </td>
                   <td className="p-3">
                     <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => toggleActive(promo)}
-                        className="rounded-xl bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/15"
-                      >
-                        {promo.is_active ? t("admin.promoDeactivate") : t("admin.promoActivate")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deletePromo(promo)}
-                        className="inline-flex items-center gap-1 rounded-xl border border-red-300/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-500/20"
-                      >
-                        <Trash2 size={14} />
-                        {t("admin.delete")}
-                      </button>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => toggleActive(promo)}
+                          className="rounded-xl bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/15"
+                        >
+                          {promo.is_active ? t("admin.promoDeactivate") : t("admin.promoActivate")}
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => deletePromo(promo)}
+                          className="inline-flex items-center gap-1 rounded-xl border border-red-300/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-500/20"
+                        >
+                          <Trash2 size={14} />
+                          {t("admin.delete")}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

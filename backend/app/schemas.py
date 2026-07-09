@@ -413,11 +413,56 @@ class AmwalPaymentResultOut(BaseModel):
     message: str
 
 
+class AdminModulePermissions(BaseModel):
+    view: bool = False
+    create: bool = False
+    edit: bool = False
+    delete: bool = False
+
+
+class AdminPermissionsOut(BaseModel):
+    overview: AdminModulePermissions = AdminModulePermissions()
+    bookings: AdminModulePermissions = AdminModulePermissions()
+    promo: AdminModulePermissions = AdminModulePermissions()
+    transfer: AdminModulePermissions = AdminModulePermissions()
+    content: AdminModulePermissions = AdminModulePermissions()
+    fleet: AdminModulePermissions = AdminModulePermissions()
+    paths: AdminModulePermissions = AdminModulePermissions()
+    vehicles: AdminModulePermissions = AdminModulePermissions()
+    users: AdminModulePermissions = AdminModulePermissions()
+
+
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     role: str = "admin"
     username: str = ""
+    is_super_admin: bool = False
+    permissions: AdminPermissionsOut | None = None
+
+
+class AdminUserOut(BaseModel):
+    id: int
+    username: str
+    role: str
+    is_super_admin: bool
+    permissions: AdminPermissionsOut
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AdminUserCreate(BaseModel):
+    username: str
+    password: str
+    permissions: AdminPermissionsOut
+
+
+class AdminUserUpdate(BaseModel):
+    username: str | None = None
+    password: str | None = None
+    permissions: AdminPermissionsOut | None = None
 
 
 class DashboardStats(BaseModel):

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ImagePlus, Trash2 } from "lucide-react";
 import { api, isAdminAuthError, MediaAsset, MediaAssetCategory } from "../api/client";
 import { AdminMediaField } from "./AdminMediaField";
+import { AdminSession, can } from "../lib/adminPermissions";
 import { isVideoUrl, resolveMediaUrl } from "../lib/mediaUrl";
 
 const inputClass = "w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-white outline-none focus:border-forest-400";
@@ -38,12 +39,17 @@ const emptyForm = (): AssetForm => ({
 export function AdminMediaLibrary({
   token,
   onAuthFailure,
+  permissions = null,
   embedded = false
 }: {
   token: string;
   onAuthFailure: (message?: string) => void;
+  permissions?: AdminSession | null;
   embedded?: boolean;
 }) {
+  const canCreate = can(permissions, "content", "create");
+  const canEdit = can(permissions, "content", "edit");
+  const canDelete = can(permissions, "content", "delete");
   const { t } = useTranslation();
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [form, setForm] = useState<AssetForm>(emptyForm);
@@ -148,6 +154,7 @@ export function AdminMediaLibrary({
         </div>
       </div>
 
+      {canCreate && (
       <form onSubmit={submitAsset} className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
         <h3 className="text-lg font-bold">{t("admin.mediaLibraryAddTitle")}</h3>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -256,6 +263,7 @@ export function AdminMediaLibrary({
           {saving ? t("admin.sending") : t("admin.mediaLibraryAdd")}
         </button>
       </form>
+      )}
 
       {status && <p className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-forest-200">{status}</p>}
 
@@ -327,36 +335,46 @@ export function AdminMediaLibrary({
                       {asset.title_ar ? <p className="text-xs text-white/45">{asset.title_ar}</p> : null}
                     </td>
                     <td className="p-3">
-                      <button
-                        type="button"
-                        onClick={() => patchAsset(asset.id, { show_on_home_gallery: !asset.show_on_home_gallery })}
-                        className={`rounded-full px-2 py-1 text-xs font-bold ${
-                          asset.show_on_home_gallery ? "bg-forest-500/20 text-forest-200" : "bg-white/10 text-white/45"
-                        }`}
-                      >
-                        {asset.show_on_home_gallery ? t("admin.yes") : t("admin.no")}
-                      </button>
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          onClick={() => patchAsset(asset.id, { show_on_home_gallery: !asset.show_on_home_gallery })}
+                          className={`rounded-full px-2 py-1 text-xs font-bold ${
+                            asset.show_on_home_gallery ? "bg-forest-500/20 text-forest-200" : "bg-white/10 text-white/45"
+                          }`}
+                        >
+                          {asset.show_on_home_gallery ? t("admin.yes") : t("admin.no")}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-white/50">{asset.show_on_home_gallery ? t("admin.yes") : t("admin.no")}</span>
+                      )}
                     </td>
                     <td className="p-3">
-                      <button
-                        type="button"
-                        onClick={() => patchAsset(asset.id, { is_active: !asset.is_active })}
-                        className={`rounded-full px-2 py-1 text-xs font-bold ${
-                          asset.is_active ? "bg-forest-500/20 text-forest-200" : "bg-white/10 text-white/45"
-                        }`}
-                      >
-                        {asset.is_active ? t("admin.mediaLibraryActive") : t("admin.mediaLibraryInactive")}
-                      </button>
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          onClick={() => patchAsset(asset.id, { is_active: !asset.is_active })}
+                          className={`rounded-full px-2 py-1 text-xs font-bold ${
+                            asset.is_active ? "bg-forest-500/20 text-forest-200" : "bg-white/10 text-white/45"
+                          }`}
+                        >
+                          {asset.is_active ? t("admin.mediaLibraryActive") : t("admin.mediaLibraryInactive")}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-white/50">{asset.is_active ? t("admin.mediaLibraryActive") : t("admin.mediaLibraryInactive")}</span>
+                      )}
                     </td>
                     <td className="p-3">
-                      <button
-                        type="button"
-                        onClick={() => deleteAsset(asset)}
-                        className="inline-flex items-center gap-1 rounded-xl border border-red-300/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200"
-                      >
-                        <Trash2 size={14} />
-                        {t("admin.delete")}
-                      </button>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => deleteAsset(asset)}
+                          className="inline-flex items-center gap-1 rounded-xl border border-red-300/30 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200"
+                        >
+                          <Trash2 size={14} />
+                          {t("admin.delete")}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
