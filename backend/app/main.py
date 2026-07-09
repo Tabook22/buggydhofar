@@ -988,7 +988,10 @@ def admin_update_user(
     if not user or user.role == perm.ROLE_SCANNER:
         raise HTTPException(status_code=404, detail="Admin user not found.")
     if perm.is_super_admin(user) and (payload.permissions is not None or payload.role is not None):
-        raise HTTPException(status_code=400, detail="Super admin account cannot be changed here.")
+        raise HTTPException(
+            status_code=400,
+            detail="Super admin role and permissions cannot be changed. You can update username and password only.",
+        )
     if payload.role is not None:
         if payload.role not in perm.MANAGEABLE_ROLES:
             raise HTTPException(status_code=400, detail="Invalid role. Choose admin or normal.")

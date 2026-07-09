@@ -250,11 +250,6 @@ export function AdminUsersPanel({
   }
 
   function selectUser(user: AdminUser) {
-    if (user.is_super_admin) {
-      setExpandedId((current) => (current === user.id ? null : user.id));
-      cancelEdit();
-      return;
-    }
     setShowAddForm(false);
     setEditingId(user.id);
     setExpandedId(null);
@@ -340,28 +335,25 @@ export function AdminUsersPanel({
     return parts.length ? parts.join(" · ") : t("admin.userNoAccess");
   }
 
-  async function saveEdit(event: FormEvent, userId: number) {
+  async function saveEdit(event: FormEvent, user: AdminUser) {
     event.preventDefault();
     if (!editForm) return;
     setSaving(true);
     setStatus(null);
-    const permissions =
-      editForm.role === "normal" ? stripNonViewPermissions(editForm.permissions) : editForm.permissions;
     try {
-      const payload: {
-        username: string;
-        role: StaffRole;
-        password?: string;
-        permissions: AdminPermissions;
-      } = {
-        username: editForm.username.trim(),
-        role: editForm.role,
-        permissions
+      const payload: Record<string, unknown> = {
+        username: editForm.username.trim()
       };
       if (editForm.password.trim()) {
         payload.password = editForm.password;
       }
-      await api.adminSend(`/api/admin/users/${userId}`, token, "PATCH", payload);
+      if (!user.is_super_admin) {
+        const permissions =
+          editForm.role === "normal" ? stripNonViewPermissions(editForm.permissions) : editForm.permissions;
+        payload.role = editForm.role;
+        payload.permissions = permissions;
+      }
+      await api.adminSend(`/api/admin/users/${user.id}`, token, "PATCH", payload);
       setStatus(t("admin.userUpdated"));
       cancelEdit();
       await loadUsers();
@@ -461,23 +453,22 @@ export function AdminUsersPanel({
             users.map((user) => {
               const isExpanded = expandedId === user.id;
               const isEditing = editingId === user.id && editForm !== null;
-              const canEdit = !user.is_super_admin;
 
               return (
                 <div
                   key={user.id}
-                  className={`rounded-2xl border bg-white/5 transition-colors ${
+                  className={`cursor-pointer rounded-2xl border bg-white/5 transition-colors hover:border-white/25 ${
                     isEditing ? "border-forest-400/60 ring-1 ring-forest-400/20" : "border-white/10"
-                  } ${canEdit ? "cursor-pointer hover:border-white/25" : ""}`}
+                  }`}
                   onClick={() => selectUser(user)}
                   onKeyDown={(event) => {
-                    if (canEdit && (event.key === "Enter" || event.key === " ")) {
+                    if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
                       selectUser(user);
                     }
                   }}
-                  role={canEdit ? "button" : undefined}
-                  tabIndex={canEdit ? 0 : undefined}
+                  role="button"
+                  tabIndex={0}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-4 p-4">
                     <div className="min-w-0 flex-1">
@@ -519,7 +510,7 @@ export function AdminUsersPanel({
                           {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         </button>
                       )}
-                      {canEdit && (
+                      {!user.is_super_admin && (
                         <button
                           type="button"
                           onClick={(event) => deleteUser(user, event)}
@@ -535,11 +526,13 @@ export function AdminUsersPanel({
                   {isEditing && editForm && (
                     <form
                       className="border-t border-forest-400/20 px-4 pb-4 pt-4"
-                      onSubmit={(event) => saveEdit(event, user.id)}
+                      onSubmit={(event) => saveEdit(event, user)}
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <p className="mb-4 text-sm text-white/70">{t("admin.editUserHint")}</p>
-                      <div className="grid gap-3 md:grid-cols-3">
+                      <p className="mb-4 text-sm text-white/70">
+                        {user.is_super_admin ? t("admin.editSuperAdminHint") : t("admin.editUserHint")}
+                      </p>
+                      <div className={`grid gap-3 ${user.is_super_admin ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
                         <label className="block">
                           <span className="mb-1 block text-xs text-white/50">{t("admin.username")}</span>
                           <input
@@ -559,32 +552,42 @@ export function AdminUsersPanel({
                             onChange={(event) => setEditForm({ ...editForm, password: event.target.value })}
                           />
                         </label>
-                        <label className="block">
-                          <span className="mb-1 block text-xs text-white/50">{t("admin.userRoleLabel")}</span>
-                          <select
-                            className={inputClass}
-                            value={editForm.role}
-                            onChange={(event) => setEditRole(event.target.value as StaffRole)}
-                          >
-                            <option value="admin">{t("admin.roleAdmin")}</option>
-                            <option value="normal">{t("admin.roleNormal")}</option>
-                          </select>
-                        </label>
+                        {!user.is_super_admin && (
+                          <label className="block">
+                            <span className="mb-1 block text-xs text-white/50">{t("admin.userRoleLabel")}</span>
+                            <select
+                              className={inputClass}
+                              value={editForm.role}
+                              onChange={(event) => setEditRole(event.target.value as StaffRole)}
+                            >
+                              <option value="admin">{t("admin.roleAdmin")}</option>
+                              <option value="normal">{t("admin.roleNormal")}</option>
+                            </select>
+                          </label>
+                        )}
                       </div>
-                      {isNormalEditRole && (
-                        <p className="mt-3 text-xs text-white/50">{t("admin.roleNormalHint")}</p>
-                      )}
-                      <div className="mt-4">
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/45">
-                          {t("admin.userAccessDetails")}
+                      {user.is_super_admin ? (
+                        <p className="mt-4 rounded-xl border border-forest-400/20 bg-forest-500/10 px-4 py-3 text-sm text-forest-200">
+                          {t("admin.userAllAccess")}
                         </p>
-                        <PermissionsEditor
-                          form={editForm}
-                          isNormalRole={isNormalEditRole}
-                          onToggle={toggleEditPermission}
-                          t={t}
-                        />
-                      </div>
+                      ) : (
+                        <>
+                          {isNormalEditRole && (
+                            <p className="mt-3 text-xs text-white/50">{t("admin.roleNormalHint")}</p>
+                          )}
+                          <div className="mt-4">
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/45">
+                              {t("admin.userAccessDetails")}
+                            </p>
+                            <PermissionsEditor
+                              form={editForm}
+                              isNormalRole={isNormalEditRole}
+                              onToggle={toggleEditPermission}
+                              t={t}
+                            />
+                          </div>
+                        </>
+                      )}
                       <div className="mt-4 flex flex-wrap gap-3">
                         <button
                           type="submit"
