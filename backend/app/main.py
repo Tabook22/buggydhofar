@@ -107,6 +107,22 @@ def ensure_hero_background_type_column() -> None:
             connection.execute(text("ALTER TABLE site_content ADD COLUMN hero_background_type TEXT DEFAULT 'image'"))
 
 
+def ensure_availability_board_content_columns() -> None:
+    defaults = {
+        "availability_live_en": "TEXT DEFAULT 'Live availability'",
+        "availability_live_ar": "TEXT DEFAULT 'توفر مباشر'",
+        "availability_title_en": "TEXT DEFAULT 'Buggy Bikes Board'",
+        "availability_title_ar": "TEXT DEFAULT 'لوحة الباجيات'",
+        "availability_subtitle_en": "TEXT DEFAULT 'Real-time fleet status by time slot — like an airport departures screen.'",
+        "availability_subtitle_ar": "TEXT DEFAULT 'حالة الأسطول حسب الوقت — مثل شاشة المطارات.'",
+    }
+    with engine.begin() as connection:
+        existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(site_content)"))}
+        for column, definition in defaults.items():
+            if column not in existing_columns:
+                connection.execute(text(f"ALTER TABLE site_content ADD COLUMN {column} {definition}"))
+
+
 def ensure_payment_transfer_columns() -> None:
     defaults = {
         "transfer_title_en": "TEXT DEFAULT 'Payment Instructions'",
@@ -356,6 +372,7 @@ def startup() -> None:
     ensure_admin_permissions_column()
     ensure_payment_transfer_columns()
     ensure_hero_background_type_column()
+    ensure_availability_board_content_columns()
     db = SessionLocal()
     try:
         seed_database(db)

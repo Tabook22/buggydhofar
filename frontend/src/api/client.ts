@@ -272,6 +272,12 @@ export type SiteContent = {
   why_title_en: string;
   why_title_ar: string;
   why_image_url: string;
+  availability_live_en: string;
+  availability_live_ar: string;
+  availability_title_en: string;
+  availability_title_ar: string;
+  availability_subtitle_en: string;
+  availability_subtitle_ar: string;
   transfer_title_en: string;
   transfer_title_ar: string;
   transfer_bank_name_en: string;

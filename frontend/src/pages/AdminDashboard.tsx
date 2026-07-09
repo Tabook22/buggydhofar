@@ -183,6 +183,12 @@ const emptySiteContent: SiteContentForm = {
   why_title_en: "",
   why_title_ar: "",
   why_image_url: "",
+  availability_live_en: "",
+  availability_live_ar: "",
+  availability_title_en: "",
+  availability_title_ar: "",
+  availability_subtitle_en: "",
+  availability_subtitle_ar: "",
   ...defaultTransferSettings
 };
 
@@ -807,6 +813,36 @@ export default function AdminDashboard() {
                 <label className="block space-y-2">
                   <span className="text-sm font-semibold text-white/75">{t("admin.heroNoteAr")}</span>
                   <input className={inputClass} dir="rtl" value={siteContentForm.hero_note_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_note_ar: event.target.value })} />
+                </label>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
+              <h3 className="text-lg font-bold text-white">{t("admin.availabilityContentTitle")}</h3>
+              <p className="mt-1 text-sm text-white/60">{t("admin.availabilityContentHelp")}</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.availabilityLiveEn")}</span>
+                  <input className={inputClass} value={siteContentForm.availability_live_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, availability_live_en: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.availabilityLiveAr")}</span>
+                  <input className={inputClass} dir="rtl" value={siteContentForm.availability_live_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, availability_live_ar: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.availabilityTitleEn")}</span>
+                  <input className={inputClass} value={siteContentForm.availability_title_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, availability_title_en: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.availabilityTitleAr")}</span>
+                  <input className={inputClass} dir="rtl" value={siteContentForm.availability_title_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, availability_title_ar: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.availabilitySubtitleEn")}</span>
+                  <textarea className={inputClass} rows={2} value={siteContentForm.availability_subtitle_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, availability_subtitle_en: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.availabilitySubtitleAr")}</span>
+                  <textarea className={inputClass} dir="rtl" rows={2} value={siteContentForm.availability_subtitle_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, availability_subtitle_ar: event.target.value })} />
                 </label>
               </div>
             </div>

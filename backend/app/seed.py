@@ -137,6 +137,12 @@ HOME_CONTENT = {
     "why_title_en": "Why Book With Us?",
     "why_title_ar": "لماذا تحجز معنا؟",
     "why_image_url": "https://images.unsplash.com/photo-1507621320306-87a4aac1816c?auto=format&fit=crop&w=1200&q=85",
+    "availability_live_en": "Live availability",
+    "availability_live_ar": "توفر مباشر",
+    "availability_title_en": "Buggy Bikes Board",
+    "availability_title_ar": "لوحة الباجيات",
+    "availability_subtitle_en": "Real-time fleet status by time slot — like an airport departures screen.",
+    "availability_subtitle_ar": "حالة الأسطول حسب الوقت — مثل شاشة المطارات.",
 }
 
 PAYMENT_TRANSFER_DEFAULTS = {

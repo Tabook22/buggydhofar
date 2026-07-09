@@ -505,6 +505,12 @@ class SiteContentBase(BaseModel):
     why_title_en: str
     why_title_ar: str
     why_image_url: str
+    availability_live_en: str = "Live availability"
+    availability_live_ar: str = "توفر مباشر"
+    availability_title_en: str = "Buggy Bikes Board"
+    availability_title_ar: str = "لوحة الباجيات"
+    availability_subtitle_en: str = "Real-time fleet status by time slot — like an airport departures screen."
+    availability_subtitle_ar: str = "حالة الأسطول حسب الوقت — مثل شاشة المطارات."
     transfer_title_en: str = "Bank Account & Mobile Transfer"
     transfer_title_ar: str = "الحساب البنكي والتحويل عبر الجوال"
     transfer_bank_name_en: str = ""

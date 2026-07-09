@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, AvailabilityBoard as BoardData, FleetUnitAvailability } from "../api/client";
+import { api, AvailabilityBoard as BoardData, FleetUnitAvailability, SiteContent } from "../api/client";
+import { pickSiteText } from "../lib/siteContent";
 import { FleetBikeGrid } from "./FleetBikeGrid";
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function AvailabilityBoard() {
+export function AvailabilityBoard({ content = null }: { content?: SiteContent | null }) {
   const { t, i18n } = useTranslation();
+  const isAr = i18n.language === "ar";
+  const liveLabel = pickSiteText(content, "availability_live", isAr, t("availability.live"));
+  const boardTitle = pickSiteText(content, "availability_title", isAr, t("availability.title"));
+  const boardSubtitle = pickSiteText(content, "availability_subtitle", isAr, t("availability.subtitle"));
   const [date, setDate] = useState(todayIso());
   const [board, setBoard] = useState<BoardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -81,9 +86,9 @@ export function AvailabilityBoard() {
     <section id="availability" className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-bold uppercase tracking-[0.3em] text-forest-400">{t("availability.live")}</p>
-          <h2 className="mt-2 text-3xl font-black md:text-4xl">{t("availability.title")}</h2>
-          <p className="mt-2 max-w-2xl text-white/65">{t("availability.subtitle")}</p>
+          <p className="text-sm font-bold uppercase tracking-[0.3em] text-forest-400">{liveLabel}</p>
+          <h2 className="mt-2 text-3xl font-black md:text-4xl">{boardTitle}</h2>
+          <p className="mt-2 max-w-2xl text-white/65">{boardSubtitle}</p>
         </div>
         <label className="space-y-1">
           <span className="text-xs font-semibold uppercase tracking-wide text-white/50">{t("booking.selectDate")}</span>

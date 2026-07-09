@@ -347,7 +347,7 @@ export default function HomePage() {
 
 
 
-      <AvailabilityBoard />
+      <AvailabilityBoard content={content} />
 
 
 
