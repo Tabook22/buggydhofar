@@ -107,6 +107,34 @@ def ensure_hero_background_type_column() -> None:
             connection.execute(text("ALTER TABLE site_content ADD COLUMN hero_background_type TEXT DEFAULT 'image'"))
 
 
+def ensure_how_steps_content_columns() -> None:
+    defaults = {
+        "how_title_en": "TEXT DEFAULT 'Simple Booking Steps'",
+        "how_title_ar": "TEXT DEFAULT 'خطوات الحجز البسيطة'",
+        "how_step1_title_en": "TEXT DEFAULT 'Choose Date'",
+        "how_step1_title_ar": "TEXT DEFAULT 'اختر التاريخ'",
+        "how_step1_text_en": "TEXT DEFAULT 'Pick your preferred date.'",
+        "how_step1_text_ar": "TEXT DEFAULT 'حدد التاريخ المناسب لك.'",
+        "how_step2_title_en": "TEXT DEFAULT 'Pick Time Slot'",
+        "how_step2_title_ar": "TEXT DEFAULT 'اختر الوقت'",
+        "how_step2_text_en": "TEXT DEFAULT 'See how many buggies are free for each time.'",
+        "how_step2_text_ar": "TEXT DEFAULT 'شاهد عدد الباجيات المتاحة لكل وقت.'",
+        "how_step3_title_en": "TEXT DEFAULT 'Select Buggy'",
+        "how_step3_title_ar": "TEXT DEFAULT 'اختر الباجي'",
+        "how_step3_text_en": "TEXT DEFAULT 'Choose an available buggy bike from the fleet.'",
+        "how_step3_text_ar": "TEXT DEFAULT 'اختر دراجة باجي متاحة من الأسطول.'",
+        "how_step4_title_en": "TEXT DEFAULT 'Pay'",
+        "how_step4_title_ar": "TEXT DEFAULT 'ادفع'",
+        "how_step4_text_en": "TEXT DEFAULT 'Pay by Visa or bank transfer.'",
+        "how_step4_text_ar": "TEXT DEFAULT 'ادفع بالفيزا أو التحويل البنكي.'",
+    }
+    with engine.begin() as connection:
+        existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(site_content)"))}
+        for column, definition in defaults.items():
+            if column not in existing_columns:
+                connection.execute(text(f"ALTER TABLE site_content ADD COLUMN {column} {definition}"))
+
+
 def ensure_footer_nav_content_columns() -> None:
     defaults = {
         "site_name_en": "TEXT DEFAULT 'Buggy Bike Booking'",
@@ -392,6 +420,7 @@ def startup() -> None:
     ensure_hero_background_type_column()
     ensure_availability_board_content_columns()
     ensure_footer_nav_content_columns()
+    ensure_how_steps_content_columns()
     db = SessionLocal()
     try:
         seed_database(db)

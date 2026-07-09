@@ -197,6 +197,24 @@ const emptySiteContent: SiteContentForm = {
   nav_book_ar: "",
   footer_admin_en: "",
   footer_admin_ar: "",
+  how_title_en: "",
+  how_title_ar: "",
+  how_step1_title_en: "",
+  how_step1_title_ar: "",
+  how_step1_text_en: "",
+  how_step1_text_ar: "",
+  how_step2_title_en: "",
+  how_step2_title_ar: "",
+  how_step2_text_en: "",
+  how_step2_text_ar: "",
+  how_step3_title_en: "",
+  how_step3_title_ar: "",
+  how_step3_text_en: "",
+  how_step3_text_ar: "",
+  how_step4_title_en: "",
+  how_step4_title_ar: "",
+  how_step4_text_en: "",
+  how_step4_text_ar: "",
   ...defaultTransferSettings
 };
 
@@ -890,6 +908,65 @@ export default function AdminDashboard() {
                   <span className="text-sm font-semibold text-white/75">{t("admin.footerAdminAr")}</span>
                   <input className={inputClass} dir="rtl" value={siteContentForm.footer_admin_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, footer_admin_ar: event.target.value })} />
                 </label>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
+              <h3 className="text-lg font-bold text-white">{t("admin.howContentTitle")}</h3>
+              <p className="mt-1 text-sm text-white/60">{t("admin.howContentHelp")}</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.howTitleEn")}</span>
+                  <input className={inputClass} value={siteContentForm.how_title_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, how_title_en: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.howTitleAr")}</span>
+                  <input className={inputClass} dir="rtl" value={siteContentForm.how_title_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, how_title_ar: event.target.value })} />
+                </label>
+              </div>
+              <div className="mt-5 space-y-4">
+                {([1, 2, 3, 4] as const).map((step) => (
+                  <div key={step} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                    <p className="mb-3 text-sm font-bold text-forest-200">{t("admin.howStepLabel", { step })}</p>
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <label className="block space-y-2">
+                        <span className="text-xs font-semibold text-white/60">{t("admin.howStepTitleEn")}</span>
+                        <input
+                          className={inputClass}
+                          value={siteContentForm[`how_step${step}_title_en` as keyof SiteContentForm] as string}
+                          onChange={(event) => setSiteContentForm({ ...siteContentForm, [`how_step${step}_title_en`]: event.target.value })}
+                        />
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-xs font-semibold text-white/60">{t("admin.howStepTitleAr")}</span>
+                        <input
+                          className={inputClass}
+                          dir="rtl"
+                          value={siteContentForm[`how_step${step}_title_ar` as keyof SiteContentForm] as string}
+                          onChange={(event) => setSiteContentForm({ ...siteContentForm, [`how_step${step}_title_ar`]: event.target.value })}
+                        />
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-xs font-semibold text-white/60">{t("admin.howStepTextEn")}</span>
+                        <textarea
+                          className={inputClass}
+                          rows={2}
+                          value={siteContentForm[`how_step${step}_text_en` as keyof SiteContentForm] as string}
+                          onChange={(event) => setSiteContentForm({ ...siteContentForm, [`how_step${step}_text_en`]: event.target.value })}
+                        />
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-xs font-semibold text-white/60">{t("admin.howStepTextAr")}</span>
+                        <textarea
+                          className={inputClass}
+                          dir="rtl"
+                          rows={2}
+                          value={siteContentForm[`how_step${step}_text_ar` as keyof SiteContentForm] as string}
+                          onChange={(event) => setSiteContentForm({ ...siteContentForm, [`how_step${step}_text_ar`]: event.target.value })}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-black/20 p-4">

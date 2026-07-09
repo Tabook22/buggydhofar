@@ -17,7 +17,7 @@ import { FeatureIcon, PageShell } from "../components/Layout";
 
 import { defaultBookingSelection, loadBookingDraft, saveBookingDraft } from "../lib/bookingDraft";
 import { isVideoUrl, resolveMediaUrl } from "../lib/mediaUrl";
-import { pickSiteText } from "../lib/siteContent";
+import { buildHowSteps, pickSiteText } from "../lib/siteContent";
 
 
 
@@ -106,7 +106,7 @@ export default function HomePage() {
 
   const heroFeatures = readStringList(t("hero.features", { returnObjects: true }));
 
-  const howItems = readHowItems(t("how.items", { returnObjects: true }));
+  const howFallbackItems = readHowItems(t("how.items", { returnObjects: true }));
 
   const visibleRoutes = routes.filter((route) => route.display_on_home);
 
@@ -185,6 +185,8 @@ export default function HomePage() {
   const heroSubtitle = pickSiteText(content, "hero_subtitle", isAr, t("hero.subtitle"));
   const heroCta = pickSiteText(content, "hero_cta", isAr, t("hero.cta"));
   const heroStats = pickSiteText(content, "hero_note", isAr, t("hero.stats"));
+  const howTitle = pickSiteText(content, "how_title", isAr, t("how.title"));
+  const howItems = buildHowSteps(content, isAr, howFallbackItems);
 
   return (
 
@@ -485,7 +487,7 @@ export default function HomePage() {
 
       <section id="how" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
 
-        <h2 className="text-center text-4xl font-black">{t("how.title")}</h2>
+        <h2 className="text-center text-4xl font-black">{howTitle}</h2>
 
         <div className="mt-10 grid gap-5 md:grid-cols-4">
 
