@@ -143,6 +143,14 @@ HOME_CONTENT = {
     "availability_title_ar": "لوحة الباجيات",
     "availability_subtitle_en": "Real-time fleet status by time slot — like an airport departures screen.",
     "availability_subtitle_ar": "حالة الأسطول حسب الوقت — مثل شاشة المطارات.",
+    "site_name_en": "Buggy Bike Booking",
+    "site_name_ar": "حجز الباجي",
+    "footer_text_en": "Simple buggy bike booking for guests in Salalah.",
+    "footer_text_ar": "حجز بسيط للباجي للضيوف في صلالة.",
+    "nav_book_en": "Book Now",
+    "nav_book_ar": "احجز الآن",
+    "footer_admin_en": "Admin",
+    "footer_admin_ar": "الإدارة",
 }
 
 PAYMENT_TRANSFER_DEFAULTS = {

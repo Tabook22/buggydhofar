@@ -189,6 +189,14 @@ const emptySiteContent: SiteContentForm = {
   availability_title_ar: "",
   availability_subtitle_en: "",
   availability_subtitle_ar: "",
+  site_name_en: "",
+  site_name_ar: "",
+  footer_text_en: "",
+  footer_text_ar: "",
+  nav_book_en: "",
+  nav_book_ar: "",
+  footer_admin_en: "",
+  footer_admin_ar: "",
   ...defaultTransferSettings
 };
 
@@ -843,6 +851,44 @@ export default function AdminDashboard() {
                 <label className="block space-y-2">
                   <span className="text-sm font-semibold text-white/75">{t("admin.availabilitySubtitleAr")}</span>
                   <textarea className={inputClass} dir="rtl" rows={2} value={siteContentForm.availability_subtitle_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, availability_subtitle_ar: event.target.value })} />
+                </label>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
+              <h3 className="text-lg font-bold text-white">{t("admin.footerNavContentTitle")}</h3>
+              <p className="mt-1 text-sm text-white/60">{t("admin.footerNavContentHelp")}</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.siteNameEn")}</span>
+                  <input className={inputClass} value={siteContentForm.site_name_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, site_name_en: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.siteNameAr")}</span>
+                  <input className={inputClass} dir="rtl" value={siteContentForm.site_name_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, site_name_ar: event.target.value })} />
+                </label>
+                <label className="block space-y-2 lg:col-span-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.footerTextEn")}</span>
+                  <textarea className={inputClass} rows={2} value={siteContentForm.footer_text_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, footer_text_en: event.target.value })} />
+                </label>
+                <label className="block space-y-2 lg:col-span-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.footerTextAr")}</span>
+                  <textarea className={inputClass} dir="rtl" rows={2} value={siteContentForm.footer_text_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, footer_text_ar: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.navBookEn")}</span>
+                  <input className={inputClass} value={siteContentForm.nav_book_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, nav_book_en: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.navBookAr")}</span>
+                  <input className={inputClass} dir="rtl" value={siteContentForm.nav_book_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, nav_book_ar: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.footerAdminEn")}</span>
+                  <input className={inputClass} value={siteContentForm.footer_admin_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, footer_admin_en: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.footerAdminAr")}</span>
+                  <input className={inputClass} dir="rtl" value={siteContentForm.footer_admin_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, footer_admin_ar: event.target.value })} />
                 </label>
               </div>
             </div>

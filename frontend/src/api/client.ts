@@ -278,6 +278,14 @@ export type SiteContent = {
   availability_title_ar: string;
   availability_subtitle_en: string;
   availability_subtitle_ar: string;
+  site_name_en: string;
+  site_name_ar: string;
+  footer_text_en: string;
+  footer_text_ar: string;
+  nav_book_en: string;
+  nav_book_ar: string;
+  footer_admin_en: string;
+  footer_admin_ar: string;
   transfer_title_en: string;
   transfer_title_ar: string;
   transfer_bank_name_en: string;

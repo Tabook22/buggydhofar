@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Bike, CalendarCheck, Headphones, ShieldCheck, Trees, WalletCards } from "lucide-react";
+import { useSiteContent } from "../lib/siteContentContext";
+import { pickSiteText, pickSiteTextAr, pickSiteTextEn } from "../lib/siteContent";
 
 export function LanguageSwitcher() {
   const { i18n } = useTranslation();
@@ -18,8 +20,13 @@ export function LanguageSwitcher() {
 }
 
 export function Navbar() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const content = useSiteContent();
+  const isAr = i18n.language === "ar";
   const [scrolled, setScrolled] = useState(false);
+  const siteNameEn = pickSiteTextEn(content, "site_name", t("brand"));
+  const siteNameAr = pickSiteTextAr(content, "site_name", t("brandAr"));
+  const bookLabel = pickSiteText(content, "nav_book", isAr, t("nav.book"));
   const links = [
     ["/", t("nav.home")],
     ["/booking/lookup", t("nav.lookup")],
@@ -37,8 +44,8 @@ export function Navbar() {
     <header className={`fixed inset-x-0 top-0 z-50 transition ${scrolled ? "bg-forest-950/95 shadow-2xl backdrop-blur" : "bg-transparent"}`}>
       <nav className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <Link to="/" className="leading-tight">
-          <p className="text-lg font-black text-white">{t("brand")}</p>
-          <p className="text-xs text-forest-400">{t("brandAr")}</p>
+          <p className="text-lg font-black text-white">{siteNameEn}</p>
+          <p className="text-xs text-forest-400">{siteNameAr}</p>
         </Link>
         <div className="hidden items-center gap-6 text-sm font-semibold text-white/80 lg:flex">
           {links.map(([to, label]) =>
@@ -56,7 +63,7 @@ export function Navbar() {
         <div className="flex items-center gap-3">
           <LanguageSwitcher />
           <Link to="/booking" className="rounded-full bg-forest-500 px-5 py-2 text-sm font-bold text-white shadow-glow transition hover:bg-forest-400">
-            {t("nav.book")}
+            {bookLabel}
           </Link>
         </div>
       </nav>
@@ -65,13 +72,19 @@ export function Navbar() {
 }
 
 export function Footer() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const content = useSiteContent();
+  const isAr = i18n.language === "ar";
+  const siteName = pickSiteText(content, "site_name", isAr, isAr ? t("brandAr") : t("brand"));
+  const footerText = pickSiteText(content, "footer_text", isAr, t("footer"));
+  const adminLabel = pickSiteText(content, "footer_admin", isAr, t("nav.admin"));
+
   return (
     <footer className="bg-forest-950 px-4 py-10 text-center text-white/70">
-      <p className="text-lg font-bold text-white">{t("brand")}</p>
-      <p className="mt-2">{t("footer")}</p>
+      <p className="text-lg font-bold text-white">{siteName}</p>
+      <p className="mt-2">{footerText}</p>
       <Link to="/admin" className="mt-4 inline-block text-sm text-forest-400">
-        {t("nav.admin")}
+        {adminLabel}
       </Link>
     </footer>
   );
