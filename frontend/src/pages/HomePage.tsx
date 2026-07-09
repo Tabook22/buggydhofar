@@ -17,6 +17,7 @@ import { FeatureIcon, PageShell } from "../components/Layout";
 
 import { defaultBookingSelection, loadBookingDraft, saveBookingDraft } from "../lib/bookingDraft";
 import { isVideoUrl, resolveMediaUrl } from "../lib/mediaUrl";
+import { pickSiteText } from "../lib/siteContent";
 
 
 
@@ -179,6 +180,12 @@ export default function HomePage() {
     Boolean(heroBackgroundUrl) &&
     (content?.hero_background_type === "video" || isVideoUrl(heroBackgroundUrl, content?.hero_background_type));
 
+  const heroBadge = pickSiteText(content, "hero_badge", isAr, t("hero.badge"));
+  const heroTitle = pickSiteText(content, "hero_title", isAr, t("hero.title"));
+  const heroSubtitle = pickSiteText(content, "hero_subtitle", isAr, t("hero.subtitle"));
+  const heroCta = pickSiteText(content, "hero_cta", isAr, t("hero.cta"));
+  const heroStats = pickSiteText(content, "hero_note", isAr, t("hero.stats"));
+
   return (
 
     <PageShell>
@@ -230,19 +237,19 @@ export default function HomePage() {
 
             <p className="mb-5 inline-flex rounded-full border border-forest-400/40 bg-forest-500/10 px-4 py-2 text-sm font-bold text-forest-400">
 
-              {t("hero.badge")}
+              {heroBadge}
 
             </p>
 
-            <h1 className="max-w-3xl text-5xl font-black leading-tight text-white md:text-7xl">{t("hero.title")}</h1>
+            <h1 className="max-w-3xl text-5xl font-black leading-tight text-white md:text-7xl">{heroTitle}</h1>
 
-            <p className="mt-6 max-w-2xl text-xl leading-8 text-white/75">{t("hero.subtitle")}</p>
+            <p className="mt-6 max-w-2xl text-xl leading-8 text-white/75">{heroSubtitle}</p>
 
             <div className="mt-8 flex flex-wrap items-center gap-4">
 
               <Link to="/booking" className="rounded-full bg-forest-500 px-7 py-4 font-bold text-white shadow-glow transition hover:bg-forest-400">
 
-                {t("hero.cta")}
+                {heroCta}
 
               </Link>
 
@@ -297,7 +304,7 @@ export default function HomePage() {
                 />
                 <div className="glass absolute bottom-4 z-20 max-w-xs rounded-3xl p-5 ltr:left-4 rtl:right-4">
                   <p className="flex items-center gap-2 font-bold text-forest-400">
-                    <BadgeCheck size={20} /> {t("hero.stats")}
+                    <BadgeCheck size={20} /> {heroStats}
                   </p>
                 </div>
               </div>

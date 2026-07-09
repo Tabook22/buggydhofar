@@ -210,6 +210,7 @@ export default function AdminDashboard() {
   const pathSaveBannerRef = useRef<HTMLDivElement | null>(null);
   const [siteContentForm, setSiteContentForm] = useState<SiteContentForm>(emptySiteContent);
   const [transferMessage, setTransferMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [contentMessage, setContentMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [fleetMessage, setFleetMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [activeTab, setActiveTab] = useState<AdminTabId>(readStoredAdminTab);
   const [adminSession, setAdminSession] = useState<AdminSession | null>(() => loadAdminSession());
@@ -568,8 +569,17 @@ export default function AdminDashboard() {
 
   async function saveSiteContent(event: FormEvent) {
     event.preventDefault();
-    await api.adminSend("/api/admin/site-content", token, "PUT", siteContentForm);
-    await loadAdminData();
+    setContentMessage(null);
+    try {
+      await api.adminSend("/api/admin/site-content", token, "PUT", siteContentForm);
+      await loadAdminData();
+      setContentMessage({ type: "success", text: t("admin.contentSaved") });
+    } catch (error) {
+      setContentMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : t("admin.contentSaveFailed")
+      });
+    }
   }
 
   async function deleteItem(path: string) {
@@ -741,27 +751,64 @@ export default function AdminDashboard() {
         <section className="rounded-[2rem] bg-white/5 p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-black">Main Page Content & Images</h2>
-              <p className="mt-2 text-white/60">Edit the text, buttons, and image URLs shown on the homepage.</p>
+              <h2 className="text-2xl font-black">{t("admin.contentPageTitle")}</h2>
+              <p className="mt-2 text-white/60">{t("admin.contentPageSubtitle")}</p>
             </div>
             <a href="/" target="_blank" className="rounded-full border border-white/10 px-5 py-2 font-bold text-forest-400" rel="noreferrer">
-              View Home Page
+              {t("admin.viewHomePage")}
             </a>
           </div>
+          {contentMessage && (
+            <p className={`mt-4 rounded-2xl px-4 py-3 text-sm ${contentMessage.type === "success" ? "bg-forest-500/15 text-forest-200" : "bg-red-500/15 text-red-200"}`}>
+              {contentMessage.text}
+            </p>
+          )}
           <form onSubmit={saveSiteContent} className={`mt-6 grid gap-4 ${!can(adminSession, "content", "edit") ? "pointer-events-none opacity-60" : ""}`}>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <input className={inputClass} placeholder="Hero badge EN" value={siteContentForm.hero_badge_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_badge_en: event.target.value })} />
-              <input className={inputClass} placeholder="Hero badge AR" value={siteContentForm.hero_badge_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_badge_ar: event.target.value })} />
-              <input className={inputClass} placeholder="Hero title EN" value={siteContentForm.hero_title_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_title_en: event.target.value })} />
-              <input className={inputClass} placeholder="Hero title AR" value={siteContentForm.hero_title_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_title_ar: event.target.value })} />
-              <textarea className={inputClass} placeholder="Hero subtitle EN" value={siteContentForm.hero_subtitle_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_subtitle_en: event.target.value })} />
-              <textarea className={inputClass} placeholder="Hero subtitle AR" value={siteContentForm.hero_subtitle_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_subtitle_ar: event.target.value })} />
-              <input className={inputClass} placeholder="Main button EN" value={siteContentForm.hero_cta_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_cta_en: event.target.value })} />
-              <input className={inputClass} placeholder="Main button AR" value={siteContentForm.hero_cta_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_cta_ar: event.target.value })} />
-              <input className={inputClass} placeholder="Second button EN" value={siteContentForm.hero_secondary_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_secondary_en: event.target.value })} />
-              <input className={inputClass} placeholder="Second button AR" value={siteContentForm.hero_secondary_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_secondary_ar: event.target.value })} />
-              <input className={inputClass} placeholder="Hero note EN" value={siteContentForm.hero_note_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_note_en: event.target.value })} />
-              <input className={inputClass} placeholder="Hero note AR" value={siteContentForm.hero_note_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_note_ar: event.target.value })} />
+            <div className="rounded-2xl border border-forest-400/20 bg-forest-500/5 p-5">
+              <h3 className="text-lg font-bold text-forest-100">{t("admin.heroContentTitle")}</h3>
+              <p className="mt-1 text-sm text-white/60">{t("admin.heroContentHelp")}</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.heroBadgeEn")}</span>
+                  <input className={inputClass} value={siteContentForm.hero_badge_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_badge_en: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.heroBadgeAr")}</span>
+                  <input className={inputClass} dir="rtl" value={siteContentForm.hero_badge_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_badge_ar: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.heroTitleEn")}</span>
+                  <input className={inputClass} value={siteContentForm.hero_title_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_title_en: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.heroTitleAr")}</span>
+                  <input className={inputClass} dir="rtl" value={siteContentForm.hero_title_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_title_ar: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.heroSubtitleEn")}</span>
+                  <textarea className={inputClass} rows={3} value={siteContentForm.hero_subtitle_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_subtitle_en: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.heroSubtitleAr")}</span>
+                  <textarea className={inputClass} dir="rtl" rows={3} value={siteContentForm.hero_subtitle_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_subtitle_ar: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.heroCtaEn")}</span>
+                  <input className={inputClass} value={siteContentForm.hero_cta_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_cta_en: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.heroCtaAr")}</span>
+                  <input className={inputClass} dir="rtl" value={siteContentForm.hero_cta_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_cta_ar: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.heroNoteEn")}</span>
+                  <input className={inputClass} value={siteContentForm.hero_note_en} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_note_en: event.target.value })} />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold text-white/75">{t("admin.heroNoteAr")}</span>
+                  <input className={inputClass} dir="rtl" value={siteContentForm.hero_note_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, hero_note_ar: event.target.value })} />
+                </label>
+              </div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
               <p className="font-bold text-white">{t("admin.heroBackgroundTitle")}</p>
@@ -827,7 +874,7 @@ export default function AdminDashboard() {
               <input className={inputClass} placeholder="Why section title AR" value={siteContentForm.why_title_ar} onChange={(event) => setSiteContentForm({ ...siteContentForm, why_title_ar: event.target.value })} />
             </div>
             {can(adminSession, "content", "edit") && (
-              <button className="w-fit rounded-2xl bg-forest-500 px-6 py-3 font-bold text-white">Save Main Page Content</button>
+              <button className="w-fit rounded-2xl bg-forest-500 px-6 py-3 font-bold text-white">{t("admin.contentSave")}</button>
             )}
           </form>
         </section>
