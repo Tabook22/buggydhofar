@@ -418,7 +418,7 @@ export function BookingWidget({
               ))}
             </div>
             {!selection.groupType && (
-              <p className="text-xs text-amber-300/90">{t("booking.groupTypeRequired")}</p>
+              <p className="theme-alert-warning text-xs text-amber-300/90">{t("booking.groupTypeRequired")}</p>
             )}
           </div>
         )}
