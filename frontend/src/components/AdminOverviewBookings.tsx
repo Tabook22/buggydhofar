@@ -25,17 +25,24 @@ function archiveQuery(year: number, month: number, day: number) {
   return `?${params.toString()}`;
 }
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function flattenArchiveDays(archive: BookingArchive | null): DayEntry[] {
   if (!archive) return [];
+  const today = todayIso();
   const days: DayEntry[] = [];
   for (const year of archive.years) {
     for (const month of year.months) {
       for (const day of month.days) {
-        days.push({ ...day, year: year.year, month: month.month });
+        if (day.date >= today) {
+          days.push({ ...day, year: year.year, month: month.month });
+        }
       }
     }
   }
-  return days.sort((a, b) => b.date.localeCompare(a.date));
+  return days.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function dayKey(entry: DayEntry) {
@@ -74,6 +81,7 @@ export function AdminOverviewBookings({ token, adminSession, onAuthFailure }: Pr
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
   const [daysOpen, setDaysOpen] = useState(false);
 
+  const today = todayIso();
   const dayEntries = useMemo(() => flattenArchiveDays(archive), [archive]);
   const selectedDay = useMemo(
     () => dayEntries.find((entry) => dayKey(entry) === selectedDayKey) ?? null,
@@ -186,7 +194,14 @@ export function AdminOverviewBookings({ token, adminSession, onAuthFailure }: Pr
               }`}
             >
               <span className="min-w-0">
-                <span className="block font-bold">{formatDayLabel(entry.date, i18n.language)}</span>
+                <span className="flex flex-wrap items-center gap-2 font-bold">
+                  {formatDayLabel(entry.date, i18n.language)}
+                  {entry.date === today && (
+                    <span className="rounded-full bg-forest-500/25 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-forest-200">
+                      {t("admin.overviewToday")}
+                    </span>
+                  )}
+                </span>
                 <span className="block text-xs text-white/45">{entry.date}</span>
               </span>
               <span
