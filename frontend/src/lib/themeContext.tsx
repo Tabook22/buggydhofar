@@ -11,7 +11,7 @@ export function readStoredSiteTheme(): SiteTheme {
   } catch {
     // Ignore storage errors
   }
-  return "light";
+  return "dark";
 }
 
 type ThemeContextValue = {

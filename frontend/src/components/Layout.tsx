@@ -9,12 +9,18 @@ import { ThemeSwitcher } from "./ThemeSwitcher";
 
 export function LanguageSwitcher() {
   const { i18n } = useTranslation();
+  const { theme } = useSiteTheme();
+  const isLight = theme === "light";
   const next = i18n.language === "ar" ? "en" : "ar";
 
   return (
     <button
       onClick={() => i18n.changeLanguage(next)}
-      className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+      className={
+        isLight
+          ? "rounded-full border border-gray-200 bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 transition hover:bg-gray-200"
+          : "rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+      }
     >
       {i18n.language === "ar" ? "English" : "AR"}
     </button>
@@ -24,7 +30,9 @@ export function LanguageSwitcher() {
 export function Navbar() {
   const { t, i18n } = useTranslation();
   const content = useSiteContent();
+  const { theme } = useSiteTheme();
   const isAr = i18n.language === "ar";
+  const isLight = theme === "light";
   const [scrolled, setScrolled] = useState(false);
   const siteNameEn = pickSiteTextEn(content, "site_name", t("brand"));
   const siteNameAr = pickSiteTextAr(content, "site_name", t("brandAr"));
@@ -42,21 +50,37 @@ export function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  const headerClass = isLight
+    ? scrolled
+      ? "border-b border-gray-200 bg-white/95 shadow-md backdrop-blur"
+      : "border-b border-gray-200/80 bg-white/90 backdrop-blur"
+    : scrolled
+      ? "bg-forest-950/95 shadow-2xl backdrop-blur"
+      : "bg-transparent";
+  const brandClass = isLight ? "text-gray-900" : "text-white";
+  const navClass = isLight ? "text-gray-600" : "text-white/80";
+  const navActiveClass = isLight ? "text-forest-600" : "text-forest-400";
+  const navHoverClass = isLight ? "hover:text-forest-600" : "hover:text-forest-400";
+
   return (
-    <header className={`fixed inset-x-0 top-0 z-50 transition ${scrolled ? "bg-forest-950/95 shadow-2xl backdrop-blur" : "bg-transparent"}`}>
+    <header className={`fixed inset-x-0 top-0 z-50 transition ${headerClass}`}>
       <nav className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <Link to="/" className="leading-tight">
-          <p className="text-lg font-black text-white">{siteNameEn}</p>
-          <p className="text-xs text-forest-400">{siteNameAr}</p>
+          <p className={`text-lg font-black ${brandClass}`}>{siteNameEn}</p>
+          <p className={`text-xs ${isLight ? "text-forest-600" : "text-forest-400"}`}>{siteNameAr}</p>
         </Link>
-        <div className="hidden items-center gap-6 text-sm font-semibold text-white/80 lg:flex">
+        <div className={`hidden items-center gap-6 text-sm font-semibold lg:flex ${navClass}`}>
           {links.map(([to, label]) =>
             to.includes("#") ? (
-              <a key={to} href={to} className="transition hover:text-forest-400">
+              <a key={to} href={to} className={`transition ${navHoverClass}`}>
                 {label}
               </a>
             ) : (
-              <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "text-forest-400" : "transition hover:text-forest-400")}>
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) => (isActive ? navActiveClass : `transition ${navHoverClass}`)}
+              >
                 {label}
               </NavLink>
             )
@@ -77,16 +101,24 @@ export function Navbar() {
 export function Footer() {
   const { t, i18n } = useTranslation();
   const content = useSiteContent();
+  const { theme } = useSiteTheme();
   const isAr = i18n.language === "ar";
+  const isLight = theme === "light";
   const siteName = pickSiteText(content, "site_name", isAr, isAr ? t("brandAr") : t("brand"));
   const footerText = pickSiteText(content, "footer_text", isAr, t("footer"));
   const adminLabel = pickSiteText(content, "footer_admin", isAr, t("nav.admin"));
 
   return (
-    <footer className="bg-forest-950 px-4 py-10 text-center text-white/70">
-      <p className="text-lg font-bold text-white">{siteName}</p>
+    <footer
+      className={
+        isLight
+          ? "border-t border-gray-200 bg-gray-50 px-4 py-10 text-center text-gray-600"
+          : "bg-forest-950 px-4 py-10 text-center text-white/70"
+      }
+    >
+      <p className={`text-lg font-bold ${isLight ? "text-gray-900" : "text-white"}`}>{siteName}</p>
       <p className="mt-2">{footerText}</p>
-      <Link to="/admin" className="mt-4 inline-block text-sm text-forest-400">
+      <Link to="/admin" className={`mt-4 inline-block text-sm ${isLight ? "text-forest-600" : "text-forest-400"}`}>
         {adminLabel}
       </Link>
     </footer>

@@ -4,7 +4,7 @@
   "theme": {
     "light": "Light",
     "dark": "Dark",
-    "switchToLight": "Switch to light mode",
+    "switchToLight": "Switch to light mode (white background, dark text)",
     "switchToDark": "Switch to dark mode"
   },
   "nav": {
