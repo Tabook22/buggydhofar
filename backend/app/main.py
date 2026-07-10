@@ -1398,7 +1398,7 @@ def admin_bookings(
     year: int | None = None,
     month: int | None = None,
     day: int | None = None,
-    _: models.Admin = Depends(perm.require_permission("bookings", "view")),
+    _: models.Admin = Depends(perm.require_any_permission(("overview", "bookings"), "view")),
     db: Session = Depends(get_db),
 ):
     process_expired_pending_bookings(db)
@@ -1407,7 +1407,10 @@ def admin_bookings(
 
 
 @app.get("/api/admin/bookings/archive", response_model=schemas.BookingArchiveOut)
-def admin_bookings_archive(_: models.Admin = Depends(perm.require_permission("bookings", "view")), db: Session = Depends(get_db)):
+def admin_bookings_archive(
+    _: models.Admin = Depends(perm.require_any_permission(("overview", "bookings"), "view")),
+    db: Session = Depends(get_db),
+):
     process_expired_pending_bookings(db)
     return booking_archive.build_booking_archive(db)
 

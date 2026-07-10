@@ -7,6 +7,7 @@ import { RealMapPathPicker, RealMapRoutePreview } from "../components/RealMapRou
 import { AdminBookingsPanel } from "../components/AdminBookingsPanel";
 import { AdminBookingLinkQr } from "../components/AdminBookingLinkQr";
 import { AdminHomepageContent } from "../components/AdminHomepageContent";
+import { AdminOverviewBookings } from "../components/AdminOverviewBookings";
 import { AdminPromoCodes } from "../components/AdminPromoCodes";
 import { AdminTransferSettings, defaultTransferSettings } from "../components/AdminTransferSettings";
 import { AdminUsersPanel } from "../components/AdminUsersPanel";
@@ -728,6 +729,8 @@ export default function AdminDashboard() {
             </div>
           ))}
         </section>
+
+        <AdminOverviewBookings token={token} adminSession={adminSession} onAuthFailure={handleAuthFailure} />
         </>
         )}
 
