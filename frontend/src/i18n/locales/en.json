@@ -1,6 +1,12 @@
 {
   "brand": "Buggy Bike Booking",
   "brandAr": "حجز الباجي",
+  "theme": {
+    "light": "Light",
+    "dark": "Dark",
+    "switchToLight": "Switch to light mode",
+    "switchToDark": "Switch to dark mode"
+  },
   "nav": {
     "home": "Home",
     "experiences": "Experiences",

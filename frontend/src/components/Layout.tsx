@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { Bike, CalendarCheck, Headphones, ShieldCheck, Trees, WalletCards } from "lucide-react";
 import { useSiteContent } from "../lib/siteContentContext";
 import { pickSiteText, pickSiteTextAr, pickSiteTextEn } from "../lib/siteContent";
+import { useSiteTheme } from "../lib/themeContext";
+import { ThemeSwitcher } from "./ThemeSwitcher";
 
 export function LanguageSwitcher() {
   const { i18n } = useTranslation();
@@ -60,7 +62,8 @@ export function Navbar() {
             )
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <ThemeSwitcher compact />
           <LanguageSwitcher />
           <Link to="/booking" className="rounded-full bg-forest-500 px-5 py-2 text-sm font-bold text-white shadow-glow transition hover:bg-forest-400">
             {bookLabel}
@@ -91,8 +94,13 @@ export function Footer() {
 }
 
 export function PageShell({ children }: { children: React.ReactNode }) {
+  const { theme } = useSiteTheme();
+
   return (
-    <div className="min-h-screen bg-forest-950 text-white">
+    <div
+      className="visitor-site min-h-screen bg-forest-950 text-white transition-colors duration-300"
+      data-theme={theme}
+    >
       <Navbar />
       {children}
       <Footer />

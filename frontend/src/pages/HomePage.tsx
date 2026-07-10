@@ -228,10 +228,7 @@ export default function HomePage() {
             aria-hidden
           />
         ) : null}
-        <div
-          className="absolute inset-0 bg-gradient-to-br from-forest-950/95 via-forest-950/78 to-forest-900/35"
-          aria-hidden
-        />
+        <div className="hero-scrim absolute inset-0 bg-gradient-to-br from-forest-950/95 via-forest-950/78 to-forest-900/35" aria-hidden />
 
         <div className="relative z-10 mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
 
