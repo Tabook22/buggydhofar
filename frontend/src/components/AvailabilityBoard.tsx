@@ -83,7 +83,7 @@ export function AvailabilityBoard({ content = null }: { content?: SiteContent | 
   }, [board?.updated_at, i18n.language]);
 
   return (
-    <section id="availability" className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+    <section id="availability" className="availability-board mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm font-bold uppercase tracking-[0.3em] text-forest-400">{liveLabel}</p>
@@ -101,8 +101,8 @@ export function AvailabilityBoard({ content = null }: { content?: SiteContent | 
         </label>
       </div>
 
-      <div className="mt-8 overflow-hidden rounded-[2rem] border border-forest-400/20 bg-[#071611] shadow-glow">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-forest-500/10 px-5 py-4">
+      <div className="availability-board-panel mt-8 overflow-hidden rounded-[2rem] border border-forest-400/20 bg-[#071611] shadow-glow">
+        <div className="availability-board-header flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-forest-500/10 px-5 py-4">
           <div className="font-mono text-sm text-forest-300">
             {t("availability.totalFleet")}: <span className="text-2xl font-black text-white">{board?.total_bikes ?? "—"}</span>
           </div>

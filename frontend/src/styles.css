@@ -475,3 +475,99 @@ select option:hover {
 .visitor-site[data-theme="light"] .theme-switcher:hover {
   background-color: #e8edea;
 }
+
+/* Availability board — white panel + black text in light mode */
+.visitor-site[data-theme="light"] .availability-board-panel {
+  background-color: #ffffff !important;
+  border-color: var(--theme-border) !important;
+  box-shadow: 0 8px 32px rgb(15 36 25 / 0.08);
+}
+
+.visitor-site[data-theme="light"] .availability-board-header {
+  background-color: #f3f5f4 !important;
+  border-color: var(--theme-border) !important;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel .text-white,
+.visitor-site[data-theme="light"] .availability-board-panel .text-white\/75,
+.visitor-site[data-theme="light"] .availability-board-panel td.text-white {
+  color: #0a0f1a !important;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel .text-white\/70 {
+  color: #374151 !important;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel .text-white\/50,
+.visitor-site[data-theme="light"] .availability-board-panel .text-white\/45 {
+  color: #6b7280 !important;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel .text-forest-300 {
+  color: #166534 !important;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel thead tr {
+  color: #4b5563 !important;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel tbody tr {
+  border-color: var(--theme-border);
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel tbody tr:hover {
+  background-color: #f9faf9 !important;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel tbody tr.bg-forest-500\/10 {
+  background-color: rgb(29 138 86 / 0.1) !important;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel .text-forest-400 {
+  color: #15803d !important;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel .bg-forest-500\/20.text-forest-200 {
+  background-color: rgb(29 138 86 / 0.12) !important;
+  color: #166534 !important;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel .bg-red-500\/20.text-red-200 {
+  background-color: rgb(220 38 38 / 0.1) !important;
+  color: #b91c1c !important;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel .bg-yellow-500\/20.text-yellow-100,
+.visitor-site[data-theme="light"] .availability-board-panel .text-yellow-300 {
+  background-color: rgb(220 38 38 / 0.1) !important;
+  color: #dc2626 !important;
+  font-weight: 700;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel .text-red-300 {
+  color: #dc2626 !important;
+  font-weight: 700;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel .fleet-bike-grid .text-white\/65,
+.visitor-site[data-theme="light"] .availability-board-panel .fleet-bike-grid .text-white\/50 {
+  color: #374151 !important;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel .fleet-bike-grid .border-white\/10.bg-white\/5 {
+  background-color: #f9faf9 !important;
+  border-color: var(--theme-border) !important;
+  color: #6b7280 !important;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel .fleet-bike-grid .border-forest-400\/55.bg-forest-500\/20.text-forest-200 {
+  background-color: rgb(29 138 86 / 0.1) !important;
+  border-color: rgb(29 138 86 / 0.35) !important;
+  color: #166534 !important;
+}
+
+.visitor-site[data-theme="light"] .availability-board-panel .fleet-bike-grid .border-red-400\/35.bg-red-500\/12.text-red-300\/90 {
+  background-color: rgb(220 38 38 / 0.08) !important;
+  border-color: rgb(220 38 38 / 0.3) !important;
+  color: #b91c1c !important;
+}

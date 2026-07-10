@@ -42,7 +42,7 @@ export function FleetBikeGrid({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="fleet-bike-grid space-y-3">
       <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-white/65">
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-forest-400/50 bg-forest-500/25 text-forest-300">
@@ -82,7 +82,7 @@ export function FleetBikeGrid({
             "flex min-h-[4.25rem] flex-col items-center justify-center rounded-xl border px-1 py-2 transition",
             available
               ? selected
-                ? "border-white bg-forest-500/35 text-white ring-2 ring-white ring-offset-2 ring-offset-[#071611]"
+                ? "border-white bg-forest-500/35 text-white ring-2 ring-white ring-offset-2 ring-offset-forest-950"
                 : atLimit
                   ? "border-forest-400/25 bg-forest-500/10 text-forest-300/50"
                   : "border-forest-400/55 bg-forest-500/20 text-forest-200 hover:bg-forest-500/30 cursor-pointer"
