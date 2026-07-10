@@ -77,6 +77,16 @@ export default function BookingPage() {
   }, [navigate]);
 
   useEffect(() => {
+    const abandonOnLeave = () => {
+      const booking = pendingVisaBooking ?? loadPendingVisaBooking();
+      if (!booking?.id || !booking.check_in_token) return;
+      api.abandonAmwalPaymentKeepalive(booking.id, booking.check_in_token);
+    };
+    window.addEventListener("pagehide", abandonOnLeave);
+    return () => window.removeEventListener("pagehide", abandonOnLeave);
+  }, [pendingVisaBooking]);
+
+  useEffect(() => {
     Promise.all([api.getVehicles(), api.getRoutes()]).then(([vehicleData, routeData]) => {
       setVehicles(vehicleData);
       setRoutes(routeData);
@@ -128,6 +138,17 @@ export default function BookingPage() {
     finishConfirmation();
   }, []);
 
+  async function abandonUnpaidBooking(booking: BookingResult | null) {
+    if (!booking?.id || !booking.check_in_token) return;
+    try {
+      await api.abandonAmwalPayment(booking.id, booking.check_in_token);
+    } catch {
+      // Best-effort cleanup; stale holds expire on the server.
+    }
+    setPendingVisaBooking(null);
+    clearPendingVisaBooking();
+  }
+
   async function startOnlinePayment(booking: BookingResult) {
     setPayingOnline(true);
     setPaymentError("");
@@ -142,19 +163,23 @@ export default function BookingPage() {
             if (payment.success) {
               goToConfirmation({ ...booking, payment_status: "paid", booking_status: "paid" }, true);
             } else {
+              await abandonUnpaidBooking(booking);
               setPaymentError(t("booking.paymentFailed"));
             }
           } catch (error) {
+            await abandonUnpaidBooking(booking);
             setPaymentError(error instanceof Error ? error.message : t("booking.paymentFailed"));
           } finally {
             setPayingOnline(false);
           }
         },
-        onError: () => {
+        onError: async () => {
+          await abandonUnpaidBooking(booking);
           setPaymentError(t("booking.paymentFailed"));
           setPayingOnline(false);
         },
-        onCancel: () => {
+        onCancel: async () => {
+          await abandonUnpaidBooking(booking);
           setPaymentError(t("booking.paymentCancelled"));
           setPayingOnline(false);
         }

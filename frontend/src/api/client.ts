@@ -599,6 +599,25 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ booking_id: bookingId, ...callbackData })
     }),
+  abandonAmwalPayment: (bookingId: number, checkInToken: string) =>
+    request<{ cancelled: boolean; message: string }>("/api/payments/amwal/abandon", {
+      method: "POST",
+      body: JSON.stringify({ booking_id: bookingId, check_in_token: checkInToken })
+    }),
+  abandonAmwalPaymentKeepalive: (bookingId: number, checkInToken: string) => {
+    const body = JSON.stringify({ booking_id: bookingId, check_in_token: checkInToken });
+    const url = `${API_BASE}/api/payments/amwal/abandon`;
+    if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+      navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
+      return;
+    }
+    void fetch(url, {
+      method: "POST",
+      body,
+      headers: { "Content-Type": "application/json" },
+      keepalive: true
+    });
+  },
   getCheckInBooking: (token: string) => request<BookingCheckIn>(`/api/check-in/${encodeURIComponent(token)}`),
   staffCheckIn: (token: string, staffToken: string) =>
     request<BookingCheckIn>(`/api/staff/check-in/${encodeURIComponent(token)}`, {

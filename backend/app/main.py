@@ -447,6 +447,7 @@ def startup() -> None:
         backfill_scanner_user(db)
         backfill_primary_super_admin(db)
         seed_payment_transfer_defaults(db)
+        booking_lifecycle.cancel_all_unpaid_visa_bookings(db)
         process_expired_pending_bookings(db)
     finally:
         db.close()
@@ -719,6 +720,8 @@ def get_booking_confirmation(token: str, db: Session = Depends(get_db)):
     booking = db.query(models.Booking).filter(models.Booking.check_in_token == token).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+    if not booking_lifecycle.is_customer_facing_booking(booking):
+        raise HTTPException(status_code=404, detail="Booking not found")
     return booking_to_out(booking, db)
 
 
@@ -813,7 +816,7 @@ def lookup_booking(payload: schemas.BookingLookupCreate, db: Session = Depends(g
         str(payload.email) if payload.email else None,
         payload.phone,
     )
-    if not booking:
+    if not booking or not booking_lifecycle.is_customer_facing_booking(booking):
         number_value = (payload.booking_number or "").strip()
         email_value = str(payload.email).strip() if payload.email else ""
         phone_value = (payload.phone or "").strip()
@@ -952,6 +955,8 @@ def complete_amwal_payment(
     if payload.merchantReference and payload.merchantReference != booking.booking_number:
         raise HTTPException(status_code=400, detail="Booking reference mismatch.")
     if not amwal.is_success_response_code(payload.responseCode):
+        booking_lifecycle.cancel_unpaid_visa_booking(db, booking)
+        db.refresh(booking)
         return schemas.AmwalPaymentResultOut(
             success=False,
             payment_status=booking.payment_status,
@@ -965,6 +970,19 @@ def complete_amwal_payment(
         booking_status="paid",
         message="Payment successful.",
     )
+
+
+@app.post("/api/payments/amwal/abandon")
+def abandon_amwal_payment(payload: schemas.AmwalAbandonRequest, db: Session = Depends(get_db)):
+    booking = db.get(models.Booking, payload.booking_id)
+    if not booking or booking.check_in_token != payload.check_in_token.strip():
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.payment_method != "visa":
+        raise HTTPException(status_code=400, detail="This booking does not use online card payment.")
+    if booking.payment_status == "paid":
+        return {"cancelled": False, "message": "Booking is already paid."}
+    cancelled = booking_lifecycle.cancel_unpaid_visa_booking(db, booking)
+    return {"cancelled": cancelled, "message": "Payment abandoned." if cancelled else "Booking was not pending."}
 
 
 @app.post("/api/payments/amwal/notify")

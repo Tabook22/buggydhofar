@@ -414,6 +414,11 @@ class AmwalPaymentResultOut(BaseModel):
     message: str
 
 
+class AmwalAbandonRequest(BaseModel):
+    booking_id: int
+    check_in_token: str
+
+
 class AdminModulePermissions(BaseModel):
     view: bool = False
     create: bool = False
