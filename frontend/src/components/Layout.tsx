@@ -18,7 +18,7 @@ export function LanguageSwitcher() {
       onClick={() => i18n.changeLanguage(next)}
       className={
         isLight
-          ? "rounded-full border border-gray-200 bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 transition hover:bg-gray-200"
+          ? "rounded-full border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-900 transition hover:bg-gray-200"
           : "rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
       }
     >
@@ -57,17 +57,17 @@ export function Navbar() {
     : scrolled
       ? "bg-forest-950/95 shadow-2xl backdrop-blur"
       : "bg-transparent";
-  const brandClass = isLight ? "text-gray-900" : "text-white";
-  const navClass = isLight ? "text-gray-600" : "text-white/80";
-  const navActiveClass = isLight ? "text-forest-600" : "text-forest-400";
-  const navHoverClass = isLight ? "hover:text-forest-600" : "hover:text-forest-400";
+  const brandClass = isLight ? "text-gray-950" : "text-white";
+  const navClass = isLight ? "text-gray-800" : "text-white/80";
+  const navActiveClass = isLight ? "text-forest-700" : "text-forest-400";
+  const navHoverClass = isLight ? "hover:text-forest-700" : "hover:text-forest-400";
 
   return (
     <header className={`fixed inset-x-0 top-0 z-50 transition ${headerClass}`}>
       <nav className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <Link to="/" className="leading-tight">
           <p className={`text-lg font-black ${brandClass}`}>{siteNameEn}</p>
-          <p className={`text-xs ${isLight ? "text-forest-600" : "text-forest-400"}`}>{siteNameAr}</p>
+          <p className={`text-xs ${isLight ? "text-forest-800" : "text-forest-400"}`}>{siteNameAr}</p>
         </Link>
         <div className={`hidden items-center gap-6 text-sm font-semibold lg:flex ${navClass}`}>
           {links.map(([to, label]) =>
@@ -112,13 +112,13 @@ export function Footer() {
     <footer
       className={
         isLight
-          ? "border-t border-gray-200 bg-gray-50 px-4 py-10 text-center text-gray-600"
+          ? "border-t border-gray-200 bg-gray-50 px-4 py-10 text-center text-gray-800"
           : "bg-forest-950 px-4 py-10 text-center text-white/70"
       }
     >
-      <p className={`text-lg font-bold ${isLight ? "text-gray-900" : "text-white"}`}>{siteName}</p>
+      <p className={`text-lg font-bold ${isLight ? "text-gray-950" : "text-white"}`}>{siteName}</p>
       <p className="mt-2">{footerText}</p>
-      <Link to="/admin" className={`mt-4 inline-block text-sm ${isLight ? "text-forest-600" : "text-forest-400"}`}>
+      <Link to="/admin" className={`mt-4 inline-block text-sm ${isLight ? "text-forest-800" : "text-forest-400"}`}>
         {adminLabel}
       </Link>
     </footer>
