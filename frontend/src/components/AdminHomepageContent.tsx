@@ -1,7 +1,8 @@
 import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { LucideIcon } from "lucide-react";
-import { Image, Images, LayoutGrid, Type } from "lucide-react";
+import { HelpCircle, Image, Images, LayoutGrid, Type } from "lucide-react";
+import { AdminFaqContact } from "./AdminFaqContact";
 import type { SiteContent } from "../api/client";
 import { AdminMediaField } from "./AdminMediaField";
 import { AdminMediaLibrary } from "./AdminMediaLibrary";
@@ -18,7 +19,8 @@ const CONTENT_SUB_TABS = [
   { id: "hero", labelKey: "admin.contentSubTabHero", icon: Type },
   { id: "images", labelKey: "admin.contentSubTabImages", icon: Image },
   { id: "sections", labelKey: "admin.contentSubTabSections", icon: LayoutGrid },
-  { id: "media", labelKey: "admin.contentSubTabMedia", icon: Images }
+  { id: "media", labelKey: "admin.contentSubTabMedia", icon: Images },
+  { id: "faq", labelKey: "admin.contentSubTabFaq", icon: HelpCircle }
 ] as const satisfies ReadonlyArray<{ id: string; labelKey: string; icon: LucideIcon }>;
 
 type ContentSubTabId = (typeof CONTENT_SUB_TABS)[number]["id"];
@@ -594,6 +596,8 @@ export function AdminHomepageContent({
                 </div>
               </>
             )}
+
+            {contentSubTab === "faq" && <AdminFaqContact form={form} onChange={onChange} canEdit={canEdit} />}
 
             {showSave && (
               <button type="submit" className="w-fit rounded-2xl bg-forest-500 px-6 py-3 font-bold text-white">

@@ -4,6 +4,7 @@ import {
   formatContactPhoneDisplay,
   phoneTelUri,
   resolveContactPhone,
+  resolveWhatsAppPhone,
   whatsAppUri
 } from "../lib/contactInfo";
 import { useSiteContent } from "../lib/siteContentContext";
@@ -20,11 +21,12 @@ export function ContactActions({ layout = "row", whatsappMessage }: ContactActio
   const { theme } = useSiteTheme();
   const isLight = theme === "light";
   const phone = resolveContactPhone(content);
+  const whatsappPhone = resolveWhatsAppPhone(content);
   const displayPhone = phone ? formatContactPhoneDisplay(phone) : "";
   const telHref = phoneTelUri(phone);
-  const waHref = whatsAppUri(phone, whatsappMessage || t("contact.whatsappPrefill"));
+  const waHref = whatsAppUri(whatsappPhone, whatsappMessage || t("contact.whatsappPrefill"));
 
-  if (!phone) return null;
+  if (!phone && !whatsappPhone) return null;
 
   const buttonClass = isLight
     ? "inline-flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3 text-sm font-bold text-gray-900 shadow-sm transition hover:border-forest-400 hover:text-forest-800"
@@ -36,14 +38,18 @@ export function ContactActions({ layout = "row", whatsappMessage }: ContactActio
 
   return (
     <div className={layout === "stack" ? "flex flex-col gap-3" : "flex flex-wrap gap-3"}>
-      <a href={waHref} target="_blank" rel="noopener noreferrer" className={whatsappClass}>
-        <MessageCircle size={18} aria-hidden />
-        {t("contact.whatsapp")}
-      </a>
-      <a href={telHref} className={buttonClass}>
-        <Phone size={18} aria-hidden />
-        {t("contact.call", { phone: displayPhone })}
-      </a>
+      {whatsappPhone && waHref ? (
+        <a href={waHref} target="_blank" rel="noopener noreferrer" className={whatsappClass}>
+          <MessageCircle size={18} aria-hidden />
+          {t("contact.whatsapp")}
+        </a>
+      ) : null}
+      {phone && telHref ? (
+        <a href={telHref} className={buttonClass}>
+          <Phone size={18} aria-hidden />
+          {t("contact.call", { phone: displayPhone })}
+        </a>
+      ) : null}
     </div>
   );
 }

@@ -215,6 +215,11 @@ const emptySiteContent: SiteContentForm = {
   how_step4_title_ar: "",
   how_step4_text_en: "",
   how_step4_text_ar: "",
+  faq_title_en: "",
+  faq_title_ar: "",
+  faq_items: [],
+  contact_phone: "",
+  contact_whatsapp: "",
   ...defaultTransferSettings
 };
 

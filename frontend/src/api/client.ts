@@ -244,6 +244,13 @@ export type BookingCheckIn = {
   check_in_url: string;
 };
 
+export type FaqItem = {
+  q_en: string;
+  q_ar: string;
+  a_en: string;
+  a_ar: string;
+};
+
 export type SiteContent = {
   id: number;
   hero_badge_en: string;
@@ -325,6 +332,11 @@ export type SiteContent = {
   transfer_show_mobile_wallet: boolean;
   transfer_show_mobile_number: boolean;
   transfer_show_notes: boolean;
+  faq_title_en: string;
+  faq_title_ar: string;
+  faq_items: FaqItem[];
+  contact_phone: string;
+  contact_whatsapp: string;
 };
 
 export type PaymentTransferInfo = Pick<

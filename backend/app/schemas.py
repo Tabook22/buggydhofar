@@ -483,6 +483,13 @@ class DashboardStats(BaseModel):
     total_bookings: int
 
 
+class FaqItem(BaseModel):
+    q_en: str = ""
+    q_ar: str = ""
+    a_en: str = ""
+    a_ar: str = ""
+
+
 class SiteContentBase(BaseModel):
     hero_badge_en: str
     hero_badge_ar: str
@@ -563,6 +570,11 @@ class SiteContentBase(BaseModel):
     transfer_show_mobile_wallet: bool = True
     transfer_show_mobile_number: bool = True
     transfer_show_notes: bool = True
+    faq_title_en: str = "Frequently Asked Questions"
+    faq_title_ar: str = "الأسئلة الشائعة"
+    faq_items: list[FaqItem] = []
+    contact_phone: str = ""
+    contact_whatsapp: str = ""
 
 
 class SiteContentOut(SiteContentBase):

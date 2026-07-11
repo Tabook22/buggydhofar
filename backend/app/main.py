@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import extract, func, text
 from sqlalchemy.orm import Session
 
-from . import admin_permissions as perm, auth, amwal, booking_archive, booking_lifecycle, booking_numbers, booking_qr, email_service, fleet, media_assets, media_storage, models, pricing, promo_codes, routes_geo, schemas, waiver
+from . import admin_permissions as perm, auth, amwal, booking_archive, booking_lifecycle, booking_numbers, booking_qr, email_service, fleet, media_assets, media_storage, models, pricing, promo_codes, routes_geo, schemas, site_content_helpers, waiver
 from .database import Base, SessionLocal, engine, get_db
 from .seed import seed_database, seed_payment_transfer_defaults
 
@@ -151,6 +151,40 @@ def ensure_footer_nav_content_columns() -> None:
         for column, definition in defaults.items():
             if column not in existing_columns:
                 connection.execute(text(f"ALTER TABLE site_content ADD COLUMN {column} {definition}"))
+
+
+def ensure_faq_contact_content_columns() -> None:
+    defaults = {
+        "faq_title_en": "TEXT DEFAULT 'Frequently Asked Questions'",
+        "faq_title_ar": "TEXT DEFAULT 'الأسئلة الشائعة'",
+        "faq_items_json": "TEXT DEFAULT '[]'",
+        "contact_phone": "TEXT DEFAULT ''",
+        "contact_whatsapp": "TEXT DEFAULT ''",
+    }
+    with engine.begin() as connection:
+        existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(site_content)"))}
+        for column, definition in defaults.items():
+            if column not in existing_columns:
+                connection.execute(text(f"ALTER TABLE site_content ADD COLUMN {column} {definition}"))
+
+
+def backfill_faq_contact_defaults(db: Session) -> None:
+    content = db.query(models.SiteContent).first()
+    if not content:
+        return
+    changed = False
+    if not getattr(content, "faq_title_en", None):
+        content.faq_title_en = "Frequently Asked Questions"
+        changed = True
+    if not getattr(content, "faq_title_ar", None):
+        content.faq_title_ar = "الأسئلة الشائعة"
+        changed = True
+    raw_items = getattr(content, "faq_items_json", None) or ""
+    if not str(raw_items).strip() or str(raw_items).strip() in {"[]", "null"}:
+        content.faq_items_json = site_content_helpers.serialize_faq_items(site_content_helpers.DEFAULT_FAQ_ITEMS)
+        changed = True
+    if changed:
+        db.commit()
 
 
 def ensure_availability_board_content_columns() -> None:
@@ -421,9 +455,11 @@ def startup() -> None:
     ensure_availability_board_content_columns()
     ensure_footer_nav_content_columns()
     ensure_how_steps_content_columns()
+    ensure_faq_contact_content_columns()
     db = SessionLocal()
     try:
         seed_database(db)
+        backfill_faq_contact_defaults(db)
         for route in db.query(models.Route).all():
             normalized = routes_geo.normalize_route_payload(
                 {
@@ -478,7 +514,7 @@ def get_site_content(db: Session = Depends(get_db)):
     content = db.query(models.SiteContent).first()
     if not content:
         raise HTTPException(status_code=404, detail="Site content not found")
-    return content
+    return site_content_helpers.site_content_to_out(content)
 
 
 @app.get("/api/gallery", response_model=list[schemas.MediaAssetOut])
@@ -1595,18 +1631,16 @@ def update_site_content(
 
     content = db.query(models.SiteContent).first()
     if not content:
-        content = models.SiteContent(**data)
+        content = models.SiteContent()
         db.add(content)
-    else:
-        for key, value in data.items():
-            setattr(content, key, value)
+    site_content_helpers.apply_site_content_payload(content, data)
     try:
         db.commit()
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=503, detail="Could not save settings. Please try again.") from exc
     db.refresh(content)
-    return content
+    return site_content_helpers.site_content_to_out(content)
 
 
 @app.patch("/api/admin/bookings/{booking_id}/status", response_model=schemas.BookingOut)
