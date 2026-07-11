@@ -16,6 +16,7 @@ import { BookingSummaryCard, BookingWidget } from "../components/Booking";
 import { FeatureIcon, PageShell } from "../components/Layout";
 
 import { defaultBookingSelection, loadBookingDraft, saveBookingDraft } from "../lib/bookingDraft";
+import { publicFromPrice } from "../lib/pricingDisplay";
 import { isVideoUrl, resolveMediaUrl } from "../lib/mediaUrl";
 import { buildHowSteps, pickSiteText } from "../lib/siteContent";
 
@@ -400,9 +401,11 @@ export default function HomePage() {
 
                       <p className="text-3xl font-black text-forest-400">
 
-                        {route.price} {t("booking.omr")}
+                        {t("routes.priceFrom", { amount: publicFromPrice().toFixed(2) })}
 
                       </p>
+
+                      <p className="mt-1 text-xs text-white/50">{t("routes.priceFromNote")}</p>
 
                       <p className="mt-1 flex items-center justify-end gap-1 text-sm text-white/60">
 

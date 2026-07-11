@@ -1,11 +1,20 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Bike, CalendarCheck, Headphones, ShieldCheck, Trees, WalletCards } from "lucide-react";
+import { Bike, CalendarCheck, Headphones, Menu, ShieldCheck, Trees, WalletCards, X } from "lucide-react";
 import { useSiteContent } from "../lib/siteContentContext";
 import { pickSiteText, pickSiteTextAr, pickSiteTextEn } from "../lib/siteContent";
 import { useSiteTheme } from "../lib/themeContext";
+import { ContactActions } from "./ContactActions";
 import { ThemeSwitcher } from "./ThemeSwitcher";
+
+const NAV_LINKS = [
+  ["/", "nav.home"],
+  ["/experiences", "nav.experiences"],
+  ["/faq", "nav.faq"],
+  ["/booking/lookup", "nav.lookup"],
+  ["/contact", "nav.contact"]
+] as const;
 
 export function LanguageSwitcher() {
   const { i18n } = useTranslation();
@@ -27,6 +36,35 @@ export function LanguageSwitcher() {
   );
 }
 
+function NavLinks({
+  onNavigate,
+  className,
+  linkClass,
+  activeClass
+}: {
+  onNavigate?: () => void;
+  className: string;
+  linkClass: string;
+  activeClass: string;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <div className={className}>
+      {NAV_LINKS.map(([to, labelKey]) => (
+        <NavLink
+          key={to}
+          to={to}
+          onClick={onNavigate}
+          className={({ isActive }) => (isActive ? activeClass : linkClass)}
+        >
+          {t(labelKey)}
+        </NavLink>
+      ))}
+    </div>
+  );
+}
+
 export function Navbar() {
   const { t, i18n } = useTranslation();
   const content = useSiteContent();
@@ -34,14 +72,10 @@ export function Navbar() {
   const isAr = i18n.language === "ar";
   const isLight = theme === "light";
   const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const siteNameEn = pickSiteTextEn(content, "site_name", t("brand"));
   const siteNameAr = pickSiteTextAr(content, "site_name", t("brandAr"));
   const bookLabel = pickSiteText(content, "nav_book", isAr, t("nav.book"));
-  const links = [
-    ["/", t("nav.home")],
-    ["/booking/lookup", t("nav.lookup")],
-    ["/contact", t("nav.contact")]
-  ];
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -49,6 +83,13 @@ export function Navbar() {
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [menuOpen]);
 
   const headerClass = isLight
     ? scrolled
@@ -61,39 +102,72 @@ export function Navbar() {
   const navClass = isLight ? "text-gray-800" : "text-white/80";
   const navActiveClass = isLight ? "text-forest-700" : "text-forest-400";
   const navHoverClass = isLight ? "hover:text-forest-700" : "hover:text-forest-400";
+  const menuButtonClass = isLight
+    ? "inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-gray-100 text-gray-900 lg:hidden"
+    : "inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white lg:hidden";
 
   return (
     <header className={`fixed inset-x-0 top-0 z-50 transition ${headerClass}`}>
       <nav className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-        <Link to="/" className="leading-tight">
+        <Link to="/" className="leading-tight" onClick={() => setMenuOpen(false)}>
           <p className={`text-lg font-black ${brandClass}`}>{siteNameEn}</p>
           <p className={`text-xs ${isLight ? "text-forest-800" : "text-forest-400"}`}>{siteNameAr}</p>
         </Link>
-        <div className={`hidden items-center gap-6 text-sm font-semibold lg:flex ${navClass}`}>
-          {links.map(([to, label]) =>
-            to.includes("#") ? (
-              <a key={to} href={to} className={`transition ${navHoverClass}`}>
-                {label}
-              </a>
-            ) : (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) => (isActive ? navActiveClass : `transition ${navHoverClass}`)}
-              >
-                {label}
-              </NavLink>
-            )
-          )}
-        </div>
+        <NavLinks
+          className={`hidden items-center gap-6 text-sm font-semibold lg:flex ${navClass}`}
+          linkClass={`transition ${navHoverClass}`}
+          activeClass={navActiveClass}
+        />
         <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            className={menuButtonClass}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-nav-panel"
+            aria-label={menuOpen ? t("nav.menuClose") : t("nav.menuOpen")}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            {menuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
           <ThemeSwitcher compact />
           <LanguageSwitcher />
-          <Link to="/booking" className="rounded-full bg-forest-500 px-5 py-2 text-sm font-bold text-white shadow-glow transition hover:bg-forest-400">
+          <Link
+            to="/booking"
+            onClick={() => setMenuOpen(false)}
+            className="hidden rounded-full bg-forest-500 px-5 py-2 text-sm font-bold text-white shadow-glow transition hover:bg-forest-400 sm:inline-flex"
+          >
             {bookLabel}
           </Link>
         </div>
       </nav>
+
+      {menuOpen && (
+        <div
+          id="mobile-nav-panel"
+          className={
+            isLight
+              ? "border-t border-gray-200 bg-white px-4 py-5 shadow-lg lg:hidden"
+              : "border-t border-white/10 bg-forest-950/98 px-4 py-5 shadow-2xl backdrop-blur lg:hidden"
+          }
+        >
+          <NavLinks
+            onNavigate={() => setMenuOpen(false)}
+            className={`flex flex-col gap-4 text-base font-semibold ${navClass}`}
+            linkClass={`transition ${navHoverClass}`}
+            activeClass={navActiveClass}
+          />
+          <div className="mt-5 flex flex-col gap-3">
+            <Link
+              to="/booking"
+              onClick={() => setMenuOpen(false)}
+              className="rounded-2xl bg-forest-500 px-5 py-3 text-center text-sm font-bold text-white shadow-glow transition hover:bg-forest-400"
+            >
+              {bookLabel}
+            </Link>
+            <ContactActions layout="stack" />
+          </div>
+        </div>
+      )}
     </header>
   );
 }
@@ -107,20 +181,53 @@ export function Footer() {
   const siteName = pickSiteText(content, "site_name", isAr, isAr ? t("brandAr") : t("brand"));
   const footerText = pickSiteText(content, "footer_text", isAr, t("footer"));
   const adminLabel = pickSiteText(content, "footer_admin", isAr, t("nav.admin"));
+  const linkClass = isLight
+    ? "text-sm font-semibold text-gray-700 transition hover:text-forest-700"
+    : "text-sm font-semibold text-white/75 transition hover:text-forest-400";
 
   return (
     <footer
       className={
         isLight
-          ? "border-t border-gray-200 bg-gray-50 px-4 py-10 text-center text-gray-800"
-          : "bg-forest-950 px-4 py-10 text-center text-white/70"
+          ? "border-t border-gray-200 bg-gray-50 px-4 py-12 text-gray-800"
+          : "bg-forest-950 px-4 py-12 text-white/70"
       }
     >
-      <p className={`text-lg font-bold ${isLight ? "text-gray-950" : "text-white"}`}>{siteName}</p>
-      <p className="mt-2">{footerText}</p>
-      <Link to="/admin" className={`mt-4 inline-block text-sm ${isLight ? "text-forest-800" : "text-forest-400"}`}>
-        {adminLabel}
-      </Link>
+      <div className="mx-auto max-w-7xl">
+        <div className="grid gap-8 md:grid-cols-[1.2fr_1fr] md:items-start">
+          <div>
+            <p className={`text-lg font-bold ${isLight ? "text-gray-950" : "text-white"}`}>{siteName}</p>
+            <p className="mt-2 max-w-md">{footerText}</p>
+            <div className="mt-5">
+              <ContactActions />
+            </div>
+            <a
+              href="mailto:info@buggydhofar.com"
+              className={`mt-4 inline-block text-sm font-semibold ${isLight ? "text-forest-800" : "text-forest-400"}`}
+            >
+              info@buggydhofar.com
+            </a>
+          </div>
+          <div>
+            <p className={`text-sm font-bold uppercase tracking-wide ${isLight ? "text-gray-900" : "text-white"}`}>
+              {t("footerExplore")}
+            </p>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {NAV_LINKS.map(([to, labelKey]) => (
+                <Link key={to} to={to} className={linkClass}>
+                  {t(labelKey)}
+                </Link>
+              ))}
+              <Link to="/booking" className={linkClass}>
+                {t("nav.book")}
+              </Link>
+            </div>
+          </div>
+        </div>
+        <Link to="/admin" className={`mt-8 inline-block text-sm ${isLight ? "text-forest-800" : "text-forest-400"}`}>
+          {adminLabel}
+        </Link>
+      </div>
     </footer>
   );
 }

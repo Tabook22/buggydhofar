@@ -15,7 +15,9 @@
     "contact": "Contact Us",
     "lookup": "My Booking",
     "book": "Book Now",
-    "admin": "Admin"
+    "admin": "Admin",
+    "menuOpen": "Open menu",
+    "menuClose": "Close menu"
   },
   "hero": {
     "badge": "Simple booking in Salalah",
@@ -43,7 +45,7 @@
     "onePassenger": "1 passenger",
     "twoPassengers": "2 passengers",
     "pickDateTime": "Pick a date and time to see available bikes.",
-    "pricingNote": "Individual (1 per bike): 25 OMR · Group (2 sharing a bike): 15 OMR each (30 OMR total). Price updates automatically.",
+    "pricingNote": "Individual (1 per bike): {{solo}} OMR · Group (2 sharing a bike): {{pairEach}} OMR each ({{pairTotal}} OMR total). Price updates automatically.",
     "bikes": "Bikes",
     "selectBikes": "Select bikes",
     "bikesNeeded": "{{count}} bike(s) required",
@@ -225,6 +227,8 @@
     "popular": "Popular",
     "book": "Book This Route",
     "minutes": "min",
+    "priceFrom": "From {{amount}} OMR",
+    "priceFromNote": "1 passenger, incl. 5% tax · final price depends on group size",
     "start": "Start",
     "end": "End",
     "enlargeMap": "Enlarge map",
@@ -318,9 +322,14 @@
     "sending": "Sending…",
     "message": "Message",
     "location": "Salalah, Dhofar, Oman",
+    "whatsapp": "Chat on WhatsApp",
+    "call": "Call {{phone}}",
+    "whatsappPrefill": "Hello, I would like to book a buggy ride in Salalah.",
+
     "success": "Thank you! We received your message and will reply soon.",
     "error": "Unable to send your message. Please try again or email info@buggydhofar.com directly."
   },
+  "footerExplore": "Explore",
   "admin": {
     "login": "Admin Login",
     "username": "Username",

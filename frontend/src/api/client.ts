@@ -387,7 +387,7 @@ export function groupTypeDetailRow(
   return [t("booking.groupType"), groupTypeLabel(type, language)];
 }
 
-export const BUGGY_PRICE_1_PASSENGER = 25;
+export const BUGGY_PRICE_1_PASSENGER = 20;
 export const BUGGY_PRICE_PER_PASSENGER_2 = 15;
 export const MAX_PASSENGERS_PER_BIKE = 2;
 export const MAX_GROUP_PASSENGERS = 40;

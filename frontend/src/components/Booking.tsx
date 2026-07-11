@@ -20,6 +20,7 @@ import {
 } from "../api/client";
 import { FleetBikeGrid } from "./FleetBikeGrid";
 import { isBookingSelectionReady, saveBookingDraft } from "../lib/bookingDraft";
+import { pricingNoteValues } from "../lib/pricingDisplay";
 
 export type BookingSelection = {
   date: string;
@@ -203,7 +204,7 @@ export function BookingSummaryCard({
       </dl>
       {vehicle && (
         <p className="mt-4 text-xs text-white/45">
-          {t("booking.pricingNote")}
+          {t("booking.pricingNote", pricingNoteValues())}
         </p>
       )}
       {showButton &&

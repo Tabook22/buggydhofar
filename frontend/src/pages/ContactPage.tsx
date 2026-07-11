@@ -1,7 +1,9 @@
 import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
+import { ContactActions } from "../components/ContactActions";
 import { PageShell } from "../components/Layout";
+import { useSiteTheme } from "../lib/themeContext";
 
 type ContactForm = {
   full_name: string;
@@ -19,12 +21,15 @@ const emptyForm: ContactForm = {
 
 export default function ContactPage() {
   const { t } = useTranslation();
+  const { theme } = useSiteTheme();
+  const isLight = theme === "light";
   const [form, setForm] = useState<ContactForm>(emptyForm);
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inputClass =
-    "w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white outline-none transition focus:border-forest-400";
+  const inputClass = isLight
+    ? "w-full rounded-2xl border border-gray-300 bg-white px-4 py-3 text-gray-950 outline-none transition placeholder:text-gray-400 focus:border-forest-500"
+    : "w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white outline-none transition placeholder:text-white/40 focus:border-forest-400";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -54,13 +59,25 @@ export default function ContactPage() {
           <div>
             <h1 className="text-5xl font-black">{t("contact.title")}</h1>
             <p className="mt-4 max-w-xl text-white/70">{t("contact.subtitle")}</p>
-            <div className="mt-8 rounded-3xl bg-white/10 p-6 text-white/75">
+            <div
+              className={
+                isLight
+                  ? "mt-8 rounded-3xl border border-gray-200 bg-white p-6 text-gray-800 shadow-sm"
+                  : "mt-8 rounded-3xl bg-white/10 p-6 text-white/75"
+              }
+            >
               <p>{t("contact.location")}</p>
               <p className="mt-2">
-                <a href="mailto:info@buggydhofar.com" className="transition hover:text-forest-300">
+                <a
+                  href="mailto:info@buggydhofar.com"
+                  className={`font-semibold transition ${isLight ? "text-forest-800 hover:text-forest-600" : "hover:text-forest-300"}`}
+                >
                   info@buggydhofar.com
                 </a>
               </p>
+              <div className="mt-5">
+                <ContactActions layout="stack" />
+              </div>
             </div>
           </div>
           <form onSubmit={submit} className="glass rounded-[2rem] p-8">

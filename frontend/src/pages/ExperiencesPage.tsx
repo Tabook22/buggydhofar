@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, RouteExperience } from "../api/client";
+import { publicFromPrice } from "../lib/pricingDisplay";
 import { RealMapRoutePreview } from "../components/RealMapRoute";
 import { PageShell } from "../components/Layout";
 
@@ -27,8 +28,9 @@ export default function ExperiencesPage() {
                   <h2 className="text-2xl font-black">{i18n.language === "ar" ? route.name_ar : route.name_en}</h2>
                   <p className="mt-3 text-white/65">{i18n.language === "ar" ? route.description_ar : route.description_en}</p>
                   <p className="mt-5 font-bold text-forest-400">
-                    {route.duration_minutes} min · {route.price} {t("booking.omr")}
+                    {route.duration_minutes} {t("routes.minutes")} · {t("routes.priceFrom", { amount: publicFromPrice().toFixed(2) })}
                   </p>
+                  <p className="mt-1 text-xs text-white/50">{t("routes.priceFromNote")}</p>
                   <div className="mt-5">
                     <RealMapRoutePreview
                       route={route}
