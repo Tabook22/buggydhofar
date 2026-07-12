@@ -4,7 +4,12 @@ import { useTranslation } from "react-i18next";
 import { api, BookingResult } from "../api/client";
 import { BookingConfirmationCard } from "../components/BookingConfirmationCard";
 import { PageShell } from "../components/Layout";
-import { clearBookingSession, finalizePaidBookingSession } from "../lib/bookingSession";
+import {
+  clearPaymentCompleting,
+  clearBookingSession,
+  finalizePaidBookingSession,
+  markPaymentCompleting
+} from "../lib/bookingSession";
 
 const AMWAL_CALLBACK_KEYS = [
   "amount",
@@ -71,13 +76,18 @@ export default function BookingConfirmationPage() {
         let resolvedBooking = currentBooking;
         const callbackData = readAmwalCallback(searchParams);
         if (callbackData && currentBooking.payment_status !== "paid") {
+          markPaymentCompleting();
           try {
             const payment = await api.completeAmwalPayment(currentBooking.id, callbackData);
             if (payment.success) {
-              resolvedBooking = { ...currentBooking, payment_status: "paid", booking_status: "paid" };
+              const refreshed = await api.getBookingConfirmation(token);
+              resolvedBooking = refreshed ?? { ...currentBooking, payment_status: "paid", booking_status: "paid" };
               setPaymentJustCompleted(true);
+            } else {
+              clearPaymentCompleting();
             }
           } catch (error) {
+            clearPaymentCompleting();
             if (!cancelled) {
               setPaymentError(error instanceof Error ? error.message : t("booking.paymentFailed"));
             }

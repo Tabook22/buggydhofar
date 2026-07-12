@@ -33,8 +33,7 @@ def _booking_date_parts(booking: models.Booking) -> tuple[int, int, int, str]:
 
 def build_booking_archive(db: Session) -> dict:
     bookings = (
-        db.query(models.Booking)
-        .filter(models.Booking.booking_status.in_(booking_lifecycle.ARCHIVE_LIST_STATUSES))
+        booking_lifecycle.admin_listed_bookings_query(db)
         .order_by(models.Booking.date.desc(), models.Booking.time.desc())
         .all()
     )
@@ -78,9 +77,7 @@ def build_booking_archive(db: Session) -> dict:
 
 
 def filter_bookings_query(db: Session, year: int | None, month: int | None, day: int | None):
-    query = db.query(models.Booking).filter(
-        models.Booking.booking_status.in_(booking_lifecycle.ARCHIVE_LIST_STATUSES)
-    )
+    query = booking_lifecycle.admin_listed_bookings_query(db)
     if year and month and day:
         prefix = f"{year:04d}-{month:02d}-{day:02d}"
         query = query.filter(models.Booking.date == prefix)

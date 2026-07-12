@@ -10,9 +10,11 @@ import { PageShell } from "../components/Layout";
 import { defaultBookingSelection, clearBookingDraft, isBookingSelectionReady, resolveInitialBookingSelection, saveBookingDraft } from "../lib/bookingDraft";
 import {
   clearBookingSession,
+  clearPaymentCompleting,
   clearPendingVisaBooking,
   finalizePaidBookingSession,
   loadPendingVisaBooking,
+  markPaymentCompleting,
   savePendingVisaBooking,
   shouldBlockBookingPage
 } from "../lib/bookingSession";
@@ -75,16 +77,6 @@ export default function BookingPage() {
     window.addEventListener("pageshow", onPageShow);
     return () => window.removeEventListener("pageshow", onPageShow);
   }, [navigate]);
-
-  useEffect(() => {
-    const abandonOnLeave = () => {
-      const booking = pendingVisaBooking ?? loadPendingVisaBooking();
-      if (!booking?.id || !booking.check_in_token) return;
-      api.abandonAmwalPaymentKeepalive(booking.id, booking.check_in_token);
-    };
-    window.addEventListener("pagehide", abandonOnLeave);
-    return () => window.removeEventListener("pagehide", abandonOnLeave);
-  }, [pendingVisaBooking]);
 
   useEffect(() => {
     Promise.all([api.getVehicles(), api.getRoutes()]).then(([vehicleData, routeData]) => {
@@ -158,15 +150,18 @@ export default function BookingPage() {
       const config = await api.initAmwalPayment(booking.id, i18n.language.startsWith("ar") ? "ar" : "en");
       await openAmwalSmartBox(config, {
         onComplete: async (data) => {
+          markPaymentCompleting();
           try {
             const payment = await api.completeAmwalPayment(booking.id, data);
             if (payment.success) {
               goToConfirmation({ ...booking, payment_status: "paid", booking_status: "paid" }, true);
             } else {
+              clearPaymentCompleting();
               await abandonUnpaidBooking(booking);
               setPaymentError(t("booking.paymentFailed"));
             }
           } catch (error) {
+            clearPaymentCompleting();
             await abandonUnpaidBooking(booking);
             setPaymentError(error instanceof Error ? error.message : t("booking.paymentFailed"));
           } finally {

@@ -15,7 +15,7 @@ ACTIVE_BOOKING_STATUSES = ("pending", "paid")
 # Counts toward revenue and dashboard booking totals (fully paid only).
 COUNTED_BOOKING_STATUSES = ("paid",)
 
-# Shown in admin archive / overview day lists (fully paid only).
+# Legacy booking_status filter — admin lists use payment_status == "paid" instead.
 ARCHIVE_LIST_STATUSES = ("paid",)
 
 REVENUE_STATUSES = ("paid",)
@@ -51,12 +51,34 @@ def is_customer_facing_booking(booking: models.Booking) -> bool:
     return False
 
 
+def is_paid_booking(booking: models.Booking) -> bool:
+    return booking.payment_status == "paid"
+
+
 def is_unpaid_visa_booking(booking: models.Booking) -> bool:
-    return (
-        booking.payment_method == "visa"
-        and booking.payment_status != "paid"
-        and booking.booking_status != "paid"
+    if is_paid_booking(booking):
+        return False
+    return booking.payment_method == "visa" and booking.booking_status == "pending"
+
+
+def admin_listed_bookings_query(db: Session):
+    """Bookings with confirmed payment — shown in admin archive and overview."""
+    return db.query(models.Booking).filter(models.Booking.payment_status == "paid")
+
+
+def sync_paid_booking_statuses(db: Session) -> int:
+    """Repair rows where payment succeeded but booking_status was not updated."""
+    mismatched = (
+        db.query(models.Booking)
+        .filter(models.Booking.payment_status == "paid", models.Booking.booking_status != "paid")
+        .all()
     )
+    if not mismatched:
+        return 0
+    for booking in mismatched:
+        booking.booking_status = "paid"
+    db.commit()
+    return len(mismatched)
 
 
 def delete_booking_and_related(db: Session, booking: models.Booking, *, commit: bool = True) -> None:

@@ -480,6 +480,7 @@ def startup() -> None:
         backfill_scanner_user(db)
         backfill_primary_super_admin(db)
         seed_payment_transfer_defaults(db)
+        booking_lifecycle.sync_paid_booking_statuses(db)
         booking_lifecycle.delete_all_unpaid_visa_bookings(db)
         booking_lifecycle.purge_cancelled_unpaid_visa_bookings(db)
         process_expired_pending_bookings(db)
@@ -974,6 +975,12 @@ def complete_amwal_payment(
     if not amwal.amwal_configured():
         raise HTTPException(status_code=503, detail="Online payment is not configured yet.")
     booking = db.get(models.Booking, payload.booking_id)
+    if not booking and payload.merchantReference:
+        booking = (
+            db.query(models.Booking)
+            .filter(models.Booking.booking_number == str(payload.merchantReference).strip())
+            .first()
+        )
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     if booking.payment_status == "paid":
@@ -1010,9 +1017,10 @@ def abandon_amwal_payment(payload: schemas.AmwalAbandonRequest, db: Session = De
     booking = db.get(models.Booking, payload.booking_id)
     if not booking or booking.check_in_token != payload.check_in_token.strip():
         raise HTTPException(status_code=404, detail="Booking not found")
+    db.refresh(booking)
     if booking.payment_method != "visa":
         raise HTTPException(status_code=400, detail="This booking does not use online card payment.")
-    if booking.payment_status == "paid":
+    if booking_lifecycle.is_paid_booking(booking):
         return {"deleted": False, "cancelled": False, "message": "Booking is already paid."}
     deleted = booking_lifecycle.delete_unpaid_visa_booking(db, booking)
     return {
@@ -1880,14 +1888,14 @@ def delete_fleet_unit(
 def dashboard_stats(_: models.Admin = Depends(perm.require_permission("overview", "view")), db: Session = Depends(get_db)):
     process_expired_pending_bookings(db)
     today = date.today().isoformat()
-    active_filter = models.Booking.booking_status.in_(booking_lifecycle.COUNTED_BOOKING_STATUSES)
+    active_filter = models.Booking.payment_status == "paid"
     total_revenue = (
         db.query(func.coalesce(func.sum(models.Booking.total_price), 0))
-        .filter(models.Booking.booking_status.in_(booking_lifecycle.REVENUE_STATUSES))
+        .filter(models.Booking.payment_status == "paid")
         .scalar()
     )
     confirmed_bookings = (
-        db.query(models.Booking).filter(models.Booking.booking_status == "paid").count()
+        db.query(models.Booking).filter(models.Booking.payment_status == "paid").count()
     )
     pending_bookings = (
         db.query(models.Booking).filter(models.Booking.booking_status == "pending").count()
