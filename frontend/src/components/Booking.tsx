@@ -242,6 +242,7 @@ export function BookingWidget({
   const [fleetUnits, setFleetUnits] = useState<FleetUnitAvailability[]>([]);
   const [fleetLoading, setFleetLoading] = useState(false);
   const [availabilityMessage, setAvailabilityMessage] = useState("");
+  const [passengersDraft, setPassengersDraft] = useState(String(selection.passengers));
 
   const fieldClass = "w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-white outline-none transition placeholder:text-white/40 focus:border-forest-400";
 
@@ -256,6 +257,10 @@ export function BookingWidget({
   useEffect(() => {
     api.getTimeSlots().then((data) => setTimeSlots(data.slots)).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    setPassengersDraft(String(selection.passengers));
+  }, [selection.passengers]);
 
   useEffect(() => {
     if (!selection.date || !selection.time) {
@@ -356,13 +361,36 @@ export function BookingWidget({
     update({ fleetUnitIds: [...selection.fleetUnitIds, fleetUnitId] });
   }
 
-  function changePassengers(rawValue: number) {
-    const passengers = Math.min(Math.max(1, rawValue), maxPassengers);
-    const needed = bikesRequiredForPassengers(passengers, selection.bookingMode);
+  function applyPassengers(passengers: number) {
+    const clamped = Math.min(Math.max(1, passengers), Math.max(1, maxPassengers));
+    const needed = bikesRequiredForPassengers(clamped, selection.bookingMode);
     update({
-      passengers,
+      passengers: clamped,
       fleetUnitIds: syncFleetSelection(selection.fleetUnitIds, fleetUnits, needed)
     });
+  }
+
+  function handlePassengersInput(raw: string) {
+    const digits = raw.replace(/\D/g, "");
+    setPassengersDraft(digits);
+    if (!digits) return;
+    const parsed = Number.parseInt(digits, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) return;
+    if (parsed <= maxPassengers) {
+      applyPassengers(parsed);
+    }
+  }
+
+  function handlePassengersBlur() {
+    if (!passengersDraft.trim()) {
+      applyPassengers(1);
+      setPassengersDraft("1");
+      return;
+    }
+    const parsed = Number.parseInt(passengersDraft, 10);
+    const clamped = Math.min(Math.max(1, Number.isFinite(parsed) ? parsed : 1), Math.max(1, maxPassengers));
+    applyPassengers(clamped);
+    setPassengersDraft(String(clamped));
   }
 
   const modeButtonClass = (active: boolean) =>
@@ -442,11 +470,14 @@ export function BookingWidget({
           <span className="text-sm font-semibold text-white/75">{t("booking.passengers")}</span>
           <input
             className={fieldClass}
-            type="number"
-            min={1}
-            max={maxPassengers}
-            value={selection.passengers}
-            onChange={(event) => changePassengers(Number(event.target.value))}
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            aria-label={t("booking.passengers")}
+            value={passengersDraft}
+            onChange={(event) => handlePassengersInput(event.target.value)}
+            onBlur={handlePassengersBlur}
+            onFocus={(event) => event.target.select()}
           />
           <p className="text-xs text-white/50">
             {selection.bookingMode === "individual"
