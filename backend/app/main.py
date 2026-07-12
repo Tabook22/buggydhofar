@@ -430,10 +430,7 @@ def booking_to_admin_out(booking: models.Booking, db: Session) -> schemas.Bookin
 
 
 def process_expired_pending_bookings(db: Session) -> None:
-    expired = booking_lifecycle.expire_stale_pending_bookings(db)
-    for booking in expired:
-        email_service.send_admin_expired_booking_notice(booking.id)
-        email_service.send_booking_cancelled_task(booking.id, auto_expired=True)
+    booking_lifecycle.expire_stale_pending_bookings(db)
 
 
 @app.on_event("startup")
@@ -483,7 +480,8 @@ def startup() -> None:
         backfill_scanner_user(db)
         backfill_primary_super_admin(db)
         seed_payment_transfer_defaults(db)
-        booking_lifecycle.cancel_all_unpaid_visa_bookings(db)
+        booking_lifecycle.delete_all_unpaid_visa_bookings(db)
+        booking_lifecycle.purge_cancelled_unpaid_visa_bookings(db)
         process_expired_pending_bookings(db)
     finally:
         db.close()
@@ -991,13 +989,12 @@ def complete_amwal_payment(
     if payload.merchantReference and payload.merchantReference != booking.booking_number:
         raise HTTPException(status_code=400, detail="Booking reference mismatch.")
     if not amwal.is_success_response_code(payload.responseCode):
-        booking_lifecycle.cancel_unpaid_visa_booking(db, booking)
-        db.refresh(booking)
+        booking_lifecycle.delete_unpaid_visa_booking(db, booking)
         return schemas.AmwalPaymentResultOut(
             success=False,
-            payment_status=booking.payment_status,
-            booking_status=booking.booking_status,
-            message="Payment was not successful.",
+            payment_status="cancelled",
+            booking_status="deleted",
+            message="Payment was not successful. Your booking was removed.",
         )
     _mark_booking_paid(booking, db, background_tasks)
     return schemas.AmwalPaymentResultOut(
@@ -1016,9 +1013,13 @@ def abandon_amwal_payment(payload: schemas.AmwalAbandonRequest, db: Session = De
     if booking.payment_method != "visa":
         raise HTTPException(status_code=400, detail="This booking does not use online card payment.")
     if booking.payment_status == "paid":
-        return {"cancelled": False, "message": "Booking is already paid."}
-    cancelled = booking_lifecycle.cancel_unpaid_visa_booking(db, booking)
-    return {"cancelled": cancelled, "message": "Payment abandoned." if cancelled else "Booking was not pending."}
+        return {"deleted": False, "cancelled": False, "message": "Booking is already paid."}
+    deleted = booking_lifecycle.delete_unpaid_visa_booking(db, booking)
+    return {
+        "deleted": deleted,
+        "cancelled": deleted,
+        "message": "Incomplete booking removed." if deleted else "Booking was not pending.",
+    }
 
 
 @app.post("/api/payments/amwal/notify")
@@ -1031,8 +1032,11 @@ def amwal_cloud_notification(payload: dict, background_tasks: BackgroundTasks, d
     if not merchant_reference:
         return {"success": True, "message": "success"}
     booking = db.query(models.Booking).filter(models.Booking.booking_number == str(merchant_reference)).first()
-    if booking and booking.payment_status != "paid" and amwal.is_success_response_code(payload.get("ResponseCode")):
-        _mark_booking_paid(booking, db, background_tasks)
+    if booking and booking.payment_status != "paid":
+        if amwal.is_success_response_code(payload.get("ResponseCode")):
+            _mark_booking_paid(booking, db, background_tasks)
+        elif booking.payment_method == "visa":
+            booking_lifecycle.delete_unpaid_visa_booking(db, booking)
     return {"success": True, "message": "success"}
 
 
@@ -1473,11 +1477,7 @@ def delete_booking_record(db: Session, booking_id: int) -> bool:
     booking = db.get(models.Booking, booking_id)
     if not booking:
         return False
-    promo_codes.release_promo_usage(db, booking)
-    db.query(models.BookingEmailLog).filter(models.BookingEmailLog.booking_id == booking_id).delete(
-        synchronize_session=False
-    )
-    db.delete(booking)
+    booking_lifecycle.delete_booking_and_related(db, booking)
     return True
 
 

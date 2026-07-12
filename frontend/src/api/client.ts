@@ -612,7 +612,7 @@ export const api = {
       body: JSON.stringify({ booking_id: bookingId, ...callbackData })
     }),
   abandonAmwalPayment: (bookingId: number, checkInToken: string) =>
-    request<{ cancelled: boolean; message: string }>("/api/payments/amwal/abandon", {
+    request<{ deleted: boolean; cancelled: boolean; message: string }>("/api/payments/amwal/abandon", {
       method: "POST",
       body: JSON.stringify({ booking_id: bookingId, check_in_token: checkInToken })
     }),
