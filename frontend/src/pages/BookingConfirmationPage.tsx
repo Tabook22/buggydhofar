@@ -35,12 +35,8 @@ async function loadPaidBooking(token: string, attempts = 10): Promise<BookingRes
   return null;
 }
 
-async function dismissUnpaidVisaIfNeeded(
-  token: string,
-  booking: BookingResult,
-  paymentAttempted: boolean
-): Promise<boolean> {
-  if (!shouldDismissFailedVisa(booking, paymentAttempted)) {
+async function dismissUnpaidVisaIfNeeded(token: string, booking: BookingResult): Promise<boolean> {
+  if (!shouldDismissFailedVisa(booking)) {
     return false;
   }
   try {
@@ -81,9 +77,7 @@ export default function BookingConfirmationPage() {
         setRoutes(routeData);
 
         const callbackData = normalizeAmwalCallback(searchParams);
-        const paymentAttempted = Boolean(callbackData);
         let resolvedBooking: BookingResult | null = null;
-        let paymentFailed = false;
 
         if (callbackData) {
           markPaymentCompleting();
@@ -94,15 +88,11 @@ export default function BookingConfirmationPage() {
               if (!cancelled) {
                 setPaymentJustCompleted(true);
               }
-            } else {
-              paymentFailed = true;
-              if (!cancelled) {
-                clearPaymentCompleting();
-                setPaymentError(payment.message || t("booking.paymentFailed"));
-              }
+            } else if (!cancelled) {
+              clearPaymentCompleting();
+              setPaymentError(payment.message || t("booking.visaBookingCancelledMessage"));
             }
           } catch (error) {
-            paymentFailed = true;
             if (!cancelled) {
               clearPaymentCompleting();
               setPaymentError(error instanceof Error ? error.message : t("booking.paymentFailed"));
@@ -114,18 +104,12 @@ export default function BookingConfirmationPage() {
           resolvedBooking = await loadBooking().catch(() => null);
         }
 
-        if (resolvedBooking && !cancelled) {
-          const dismissed = await dismissUnpaidVisaIfNeeded(
-            token,
-            resolvedBooking,
-            paymentAttempted || paymentFailed
-          );
-          if (dismissed) {
-            clearBookingSession();
-            setBooking(null);
-            setBookingCancelled(true);
-            return;
-          }
+        if (resolvedBooking && shouldDismissFailedVisa(resolvedBooking) && !cancelled) {
+          await dismissUnpaidVisaIfNeeded(token, resolvedBooking);
+          clearBookingSession();
+          setBooking(null);
+          setBookingCancelled(true);
+          return;
         }
 
         if (!cancelled) {
@@ -228,14 +212,14 @@ export default function BookingConfirmationPage() {
             </div>
           )}
 
-          {!loading && booking && (
+          {!loading && booking && isPaid && (
             <BookingConfirmationCard
               booking={booking}
               routeName={routeName}
               onRedirect={handleGoHome}
-              paymentError={isPaid ? "" : paymentError}
+              paymentError=""
               paymentJustCompleted={paymentJustCompleted}
-              autoRedirect={!isPaid}
+              autoRedirect={false}
             />
           )}
         </div>

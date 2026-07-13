@@ -8,6 +8,6 @@ export function isUnpaidVisaPending(booking: BookingResult): boolean {
   );
 }
 
-export function shouldDismissFailedVisa(booking: BookingResult, paymentAttempted: boolean): boolean {
-  return isUnpaidVisaPending(booking) && (paymentAttempted || Boolean(booking.payment_started));
+export function shouldDismissFailedVisa(booking: BookingResult): boolean {
+  return isUnpaidVisaPending(booking);
 }

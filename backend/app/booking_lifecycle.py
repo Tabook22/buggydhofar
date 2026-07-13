@@ -94,12 +94,32 @@ def sync_paid_booking_statuses(db: Session) -> int:
     return len(mismatched)
 
 
+def booking_holds_fleet_slot(booking: models.Booking, *, now: datetime | None = None) -> bool:
+    """Whether this booking reserves buggies on the availability board."""
+    if booking.booking_status == "cancelled":
+        return False
+    if booking.booking_status not in ACTIVE_BOOKING_STATUSES:
+        return False
+    current = now or datetime.utcnow()
+    if booking.payment_method == "visa":
+        if booking.payment_status == "paid":
+            return True
+        hold_start = booking.amwal_payment_started_at or booking.created_at
+        if not hold_start:
+            return False
+        return hold_start >= current - timedelta(minutes=VISA_PAYMENT_HOLD_MINUTES)
+    return True
+
+
 def delete_booking_and_related(db: Session, booking: models.Booking, *, commit: bool = True) -> None:
     """Remove booking, fleet holds, promo usage, and email logs."""
     from . import promo_codes
 
     booking_id = booking.id
     promo_codes.release_promo_usage(db, booking)
+    db.query(models.BookingBike).filter(models.BookingBike.booking_id == booking_id).delete(
+        synchronize_session=False
+    )
     db.query(models.BookingEmailLog).filter(models.BookingEmailLog.booking_id == booking_id).delete(
         synchronize_session=False
     )
@@ -121,8 +141,8 @@ def is_unpaid_visa_pending_confirmation(booking: models.Booking) -> bool:
 
 
 def should_dismiss_failed_visa(booking: models.Booking) -> bool:
-    """Payment was attempted but booking is still pending — treat as cancelled."""
-    return is_unpaid_visa_pending_confirmation(booking) and booking.amwal_payment_started_at is not None
+    """Unpaid Visa booking on the confirmation flow — treat as cancelled."""
+    return is_unpaid_visa_pending_confirmation(booking)
 
 
 def is_amwal_payment_in_progress(booking: models.Booking) -> bool:

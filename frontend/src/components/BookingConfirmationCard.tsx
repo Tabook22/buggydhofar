@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, XCircle } from "lucide-react";
 import { BookingResult, groupTypeDetailRow } from "../api/client";
 import { BookingQrCode } from "./BookingQrCode";
 
@@ -37,6 +37,7 @@ export function BookingConfirmationCard({
 }: BookingConfirmationCardProps) {
   const { t, i18n } = useTranslation();
   const isPaid = booking.payment_status === "paid";
+  const isUnpaidVisa = booking.payment_method === "visa" && !isPaid;
   const paymentStepComplete = isPaid || booking.payment_method === "bank_transfer";
   const [secondsLeft, setSecondsLeft] = useState(REDIRECT_SECONDS);
 
@@ -93,18 +94,41 @@ export function BookingConfirmationCard({
 
   const title = lookupMode
     ? t("lookup.statusTitle")
-    : paymentJustCompleted || paymentStepComplete
-      ? isPaid
-        ? t("booking.paymentConfirmedTitle")
-        : t("booking.transferConfirmedTitle")
-      : t("booking.confirmed");
+    : isUnpaidVisa
+      ? t("booking.visaBookingCancelledTitle")
+      : paymentJustCompleted || paymentStepComplete
+        ? isPaid
+          ? t("booking.paymentConfirmedTitle")
+          : t("booking.transferConfirmedTitle")
+        : t("booking.confirmed");
   const subtitle = lookupMode
     ? t("lookup.statusSubtitle")
-    : paymentJustCompleted || paymentStepComplete
-      ? isPaid
-        ? t("booking.paymentConfirmedSubtitle")
-        : t("booking.transferConfirmedSubtitle")
-      : t("booking.confirmedEmail");
+    : isUnpaidVisa
+      ? t("booking.visaBookingCancelledMessage")
+      : paymentJustCompleted || paymentStepComplete
+        ? isPaid
+          ? t("booking.paymentConfirmedSubtitle")
+          : t("booking.transferConfirmedSubtitle")
+        : t("booking.confirmedEmail");
+
+  if (isUnpaidVisa && !lookupMode) {
+    return (
+      <div className="glass mx-auto max-w-3xl rounded-[2rem] p-8 md:p-10 text-center">
+        <XCircle className="mx-auto text-red-300" size={72} />
+        <h2 className="mt-6 text-3xl font-black text-red-100">{title}</h2>
+        <p className="mt-4 text-white/70">{subtitle}</p>
+        <p className="mt-3 text-sm text-white/50">{t("booking.visaBookingCancelledHint")}</p>
+        {paymentError && <p className="mt-4 rounded-2xl bg-red-500/15 px-4 py-3 text-sm text-red-200">{paymentError}</p>}
+        <button
+          type="button"
+          onClick={onRedirect}
+          className="mt-8 rounded-2xl bg-forest-500 px-8 py-4 font-bold text-white shadow-glow transition hover:bg-forest-400"
+        >
+          {t("nav.book")}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="glass mx-auto max-w-3xl rounded-[2rem] p-8 md:p-10">

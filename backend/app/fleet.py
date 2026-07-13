@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from . import models
+from . import booking_lifecycle, models
 from .pricing import (
     ACTIVE_BOOKING_STATUSES,
     MAX_GROUP_PASSENGERS,
@@ -22,27 +22,29 @@ def active_fleet_units(db: Session) -> list[models.FleetUnit]:
 
 
 def booked_fleet_unit_ids(db: Session, booking_date: str, booking_time: str) -> set[int]:
-    booked: set[int] = set()
-    legacy_rows = (
-        db.query(models.Booking.fleet_unit_id)
+    bookings = (
+        db.query(models.Booking)
         .filter(
             models.Booking.date == booking_date,
             models.Booking.time == booking_time,
-            models.Booking.fleet_unit_id.isnot(None),
             models.Booking.booking_status.in_(ACTIVE_BOOKING_STATUSES),
         )
         .all()
     )
-    booked.update(row[0] for row in legacy_rows if row[0] is not None)
+    holding_ids = {booking.id for booking in bookings if booking_lifecycle.booking_holds_fleet_slot(booking)}
+    if not holding_ids:
+        return set()
+
+    booked: set[int] = set()
+    for booking in bookings:
+        if booking.id not in holding_ids:
+            continue
+        if booking.fleet_unit_id:
+            booked.add(booking.fleet_unit_id)
 
     bike_rows = (
         db.query(models.BookingBike.fleet_unit_id)
-        .join(models.Booking, models.BookingBike.booking_id == models.Booking.id)
-        .filter(
-            models.Booking.date == booking_date,
-            models.Booking.time == booking_time,
-            models.Booking.booking_status.in_(ACTIVE_BOOKING_STATUSES),
-        )
+        .filter(models.BookingBike.booking_id.in_(holding_ids))
         .all()
     )
     booked.update(row[0] for row in bike_rows if row[0] is not None)
