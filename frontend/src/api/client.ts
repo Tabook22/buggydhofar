@@ -154,6 +154,11 @@ export type AmwalSmartBoxConfig = {
   ignore_receipt: string;
   secure_hash: string;
   primary_color: string;
+  apple_pay_enabled?: boolean;
+  request_source?: string;
+  apple_pay_element_id?: string;
+  required_billing_contact_fields?: string[];
+  required_shipping_contact_fields?: string[];
 };
 
 export type AmwalPaymentResult = {

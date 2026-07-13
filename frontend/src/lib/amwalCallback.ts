@@ -29,9 +29,27 @@ function firstPresent(source: URLSearchParams | Record<string, unknown>, aliases
   return "";
 }
 
+function unwrapSmartBoxPayload(source: Record<string, unknown>): Record<string, unknown> {
+  const nested = source.data;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    const payload = nested as Record<string, unknown>;
+    if (payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)) {
+      return {
+        ...(payload.data as Record<string, unknown>),
+        responseCode: payload.responseCode ?? (payload.data as Record<string, unknown>).responseCode
+      };
+    }
+    return payload;
+  }
+  return source;
+}
+
 export function normalizeAmwalCallback(
   source: URLSearchParams | Record<string, unknown>
 ): Record<string, string> | null {
+  if (!(source instanceof URLSearchParams)) {
+    source = unwrapSmartBoxPayload(source);
+  }
   const data: Record<string, string> = {};
   let found = false;
   for (const [canonical, aliases] of Object.entries(CALLBACK_FIELD_ALIASES)) {

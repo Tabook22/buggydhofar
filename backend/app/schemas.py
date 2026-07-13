@@ -396,6 +396,11 @@ class AmwalSmartBoxConfigOut(BaseModel):
     ignore_receipt: str
     secure_hash: str
     primary_color: str
+    apple_pay_enabled: bool = False
+    request_source: str = ""
+    apple_pay_element_id: str = "apple_pay_button"
+    required_billing_contact_fields: list[str] = []
+    required_shipping_contact_fields: list[str] = []
 
 
 class AmwalCompleteRequest(BaseModel):

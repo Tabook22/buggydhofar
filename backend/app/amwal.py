@@ -41,6 +41,13 @@ def amwal_configured() -> bool:
     return bool(_raw_secret_key() and _merchant_id() and _terminal_id())
 
 
+def apple_pay_enabled() -> bool:
+    if not amwal_configured():
+        return False
+    raw = os.getenv("AMWAL_APPLE_PAY_ENABLED", "true").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
 def _merchant_id() -> str:
     return os.getenv("AMWAL_MID", "").strip()
 
@@ -318,4 +325,26 @@ def build_smartbox_configure(
         "IgnoreReceipt": "false",
         "SecureHash": secure_hash,
         "primaryColor": "#2d6a4f",
+    }
+
+
+def build_apple_pay_configure(
+    *,
+    amount: float,
+    merchant_reference: str,
+    language_id: str,
+    check_in_token: str = "",
+) -> dict[str, Any]:
+    base = build_smartbox_configure(
+        amount=amount,
+        merchant_reference=merchant_reference,
+        language_id=language_id,
+        check_in_token=check_in_token,
+    )
+    return {
+        **base,
+        "RequestSource": "Checkout_BuggyDhofar",
+        "ApplePayElementId": "apple_pay_button",
+        "RequiredBillingContactFields": ["name", "email", "phone"],
+        "RequiredShippingContactFields": [],
     }

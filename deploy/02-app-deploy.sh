@@ -75,6 +75,12 @@ server {
     root /var/www/buggydhofar/frontend/dist;
     index index.html;
 
+    location /.well-known/ {
+        try_files $uri =404;
+        default_type text/plain;
+        add_header Cache-Control "public, max-age=3600";
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
     }

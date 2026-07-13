@@ -928,6 +928,7 @@ def amwal_payment_status():
     return {
         "configured": amwal.amwal_configured(),
         "environment": os.getenv("AMWAL_ENV", "uat").strip().lower() or "uat",
+        "apple_pay_enabled": amwal.apple_pay_enabled(),
     }
 
 
@@ -949,12 +950,20 @@ def init_amwal_payment(payload: schemas.AmwalInitRequest, db: Session = Depends(
     merchant_reference = booking.booking_number or str(booking.id)
     check_in_token = booking.check_in_token or ""
     try:
-        config = amwal.build_smartbox_configure(
-            amount=float(booking.total_price),
-            merchant_reference=merchant_reference,
-            language_id=language,
-            check_in_token=check_in_token,
-        )
+        if amwal.apple_pay_enabled():
+            config = amwal.build_apple_pay_configure(
+                amount=float(booking.total_price),
+                merchant_reference=merchant_reference,
+                language_id=language,
+                check_in_token=check_in_token,
+            )
+        else:
+            config = amwal.build_smartbox_configure(
+                amount=float(booking.total_price),
+                merchant_reference=merchant_reference,
+                language_id=language,
+                check_in_token=check_in_token,
+            )
     except ValueError as exc:
         logger.exception("AMWAL configuration error for booking %s", booking.id)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -980,6 +989,11 @@ def init_amwal_payment(payload: schemas.AmwalInitRequest, db: Session = Depends(
         ignore_receipt=config["IgnoreReceipt"],
         secure_hash=config["SecureHash"],
         primary_color=config["primaryColor"],
+        apple_pay_enabled=amwal.apple_pay_enabled(),
+        request_source=str(config.get("RequestSource", "")),
+        apple_pay_element_id=str(config.get("ApplePayElementId", "apple_pay_button")),
+        required_billing_contact_fields=list(config.get("RequiredBillingContactFields", [])),
+        required_shipping_contact_fields=list(config.get("RequiredShippingContactFields", [])),
     )
 
 

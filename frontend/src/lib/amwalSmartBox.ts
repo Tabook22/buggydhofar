@@ -17,6 +17,11 @@ export type AmwalSmartBoxConfig = {
   ignore_receipt: string;
   secure_hash: string;
   primary_color: string;
+  apple_pay_enabled?: boolean;
+  request_source?: string;
+  apple_pay_element_id?: string;
+  required_billing_contact_fields?: string[];
+  required_shipping_contact_fields?: string[];
 };
 
 export type AmwalCallbackData = Record<string, unknown>;
@@ -26,10 +31,12 @@ type AmwalCheckout = {
     SmartBoxColorConfig?: { PrimaryColor: string };
   };
   showSmartBox: () => void;
+  addPayWithApplePayButton?: () => void;
 };
 
 declare global {
   interface Window {
+    ApplePaySession?: unknown;
     SmartBox?: {
       Checkout: AmwalCheckout;
     };
@@ -37,6 +44,10 @@ declare global {
 }
 
 let scriptLoading: Promise<void> | null = null;
+
+export function isApplePaySupported(): boolean {
+  return typeof window.ApplePaySession !== "undefined";
+}
 
 export function loadAmwalScript(url: string): Promise<void> {
   if (window.SmartBox?.Checkout) {
@@ -73,13 +84,8 @@ type AmwalCallbacks = {
   onCancel: () => void;
 };
 
-export async function openAmwalSmartBox(config: AmwalSmartBoxConfig, callbacks: AmwalCallbacks) {
-  await loadAmwalScript(config.script_url);
-  const checkout = window.SmartBox?.Checkout;
-  if (!checkout) {
-    throw new Error("AMWAL SmartBox is not available");
-  }
-  checkout.configure = {
+function buildConfigurePayload(config: AmwalSmartBoxConfig, callbacks: AmwalCallbacks, applePay = false) {
+  const payload: Record<string, unknown> = {
     MID: config.mid,
     TID: config.tid,
     CurrencyId: config.currency_id,
@@ -98,6 +104,74 @@ export async function openAmwalSmartBox(config: AmwalSmartBoxConfig, callbacks: 
     errorCallback: callbacks.onError,
     cancelCallback: callbacks.onCancel
   };
+
+  if (config.request_source) {
+    payload.RequestSource = config.request_source;
+  }
+
+  if (applePay) {
+    payload.ApplePayElementId = config.apple_pay_element_id || "apple_pay_button";
+    if (config.required_billing_contact_fields?.length) {
+      payload.RequiredBillingContactFields = config.required_billing_contact_fields;
+    }
+    if (config.required_shipping_contact_fields?.length) {
+      payload.RequiredShippingContactFields = config.required_shipping_contact_fields;
+    }
+  }
+
+  return payload;
+}
+
+async function configureCheckout(config: AmwalSmartBoxConfig, callbacks: AmwalCallbacks, applePay = false) {
+  await loadAmwalScript(config.script_url);
+  const checkout = window.SmartBox?.Checkout;
+  if (!checkout) {
+    throw new Error("AMWAL SmartBox is not available");
+  }
+
+  checkout.configure = buildConfigurePayload(config, callbacks, applePay);
   checkout.configure.SmartBoxColorConfig = { PrimaryColor: config.primary_color };
+
+  if (applePay) {
+    checkout.configure.isApplePayPageReadyCallback = (response: AmwalCallbackData) => {
+      const nested = response as { data?: { canMakeApplePayPayments?: boolean } };
+      if (!nested?.data?.canMakeApplePayPayments) {
+        const element = document.getElementById(config.apple_pay_element_id || "apple_pay_button");
+        if (element?.parentElement) {
+          element.parentElement.style.display = "none";
+        }
+      }
+    };
+  }
+
+  return checkout;
+}
+
+export async function openAmwalSmartBox(config: AmwalSmartBoxConfig, callbacks: AmwalCallbacks) {
+  const checkout = await configureCheckout(config, callbacks, false);
   checkout.showSmartBox();
+}
+
+export async function mountAmwalApplePay(config: AmwalSmartBoxConfig, callbacks: AmwalCallbacks) {
+  if (!config.apple_pay_enabled || !isApplePaySupported()) {
+    return false;
+  }
+
+  const elementId = config.apple_pay_element_id || "apple_pay_button";
+  if (!document.getElementById(elementId)) {
+    return false;
+  }
+
+  const checkout = await configureCheckout(config, callbacks, true);
+  if (typeof checkout.addPayWithApplePayButton !== "function") {
+    return false;
+  }
+
+  const container = document.getElementById(elementId);
+  if (container) {
+    container.innerHTML = "";
+  }
+
+  checkout.addPayWithApplePayButton();
+  return true;
 }

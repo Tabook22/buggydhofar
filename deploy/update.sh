@@ -23,6 +23,9 @@ cd ../frontend
 npm install
 npm run build
 
+if [[ -f "$APP_DIR/deploy/patch-nginx-apple-pay.sh" ]]; then
+  sudo bash "$APP_DIR/deploy/patch-nginx-apple-pay.sh"
+fi
 if [[ -f "$APP_DIR/deploy/patch-nginx-media-upload.sh" ]]; then
   sudo bash "$APP_DIR/deploy/patch-nginx-media-upload.sh"
 else
