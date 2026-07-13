@@ -14,7 +14,12 @@ AMWAL_ENV_URLS = {
     "sit": "https://test.amwalpg.com:19443/js/SmartBox.js?v=1.1",
 }
 
-SUCCESS_RESPONSE_CODES = {"00", "0", "000"}
+SUCCESS_RESPONSE_CODES = {"00", "0", "000", "0000", "00000"}
+
+# ISO-style decline codes — only treat as failure when paired with a transaction id.
+DECLINE_RESPONSE_CODES = {
+    "05", "12", "14", "30", "41", "43", "51", "54", "55", "57", "58", "61", "62", "65", "75", "91", "96",
+}
 
 CALLBACK_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "amount": ("amount", "Amount"),
@@ -175,9 +180,49 @@ def callback_hash_params(payload: dict[str, Any]) -> dict[str, str]:
     return {**normalized, "amount": amount}
 
 
-def is_trusted_payment_success(payload: dict[str, Any]) -> bool:
+def is_decline_response_code(code: Any) -> bool:
+    return str(code or "").strip() in DECLINE_RESPONSE_CODES
+
+
+def merchant_reference_matches(
+    booking_number: str | None,
+    merchant_reference: str | None,
+    booking_id: int | None = None,
+) -> bool:
+    ref = (merchant_reference or "").strip()
+    if not ref:
+        return True
+    number = (booking_number or "").strip()
+    if number and (ref == number or ref.upper() == number.upper()):
+        return True
+    if booking_id is not None and ref == str(booking_id):
+        return True
+    return False
+
+
+def should_mark_booking_paid_from_callback(payload: dict[str, Any]) -> tuple[bool, str]:
+    """
+    Decide whether to confirm payment. A transaction id means the gateway processed
+    a charge — never delete the booking in that case unless the response is a known decline.
+    """
     normalized = normalize_callback_payload(payload)
-    return bool(normalized.get("transactionId")) and is_success_response_code(normalized.get("responseCode"))
+    txn_id = normalized.get("transactionId", "").strip()
+    response_code = normalized.get("responseCode", "").strip()
+    hash_valid = verify_callback_secure_hash(payload)
+
+    if txn_id and is_decline_response_code(response_code):
+        return False, "declined"
+
+    if is_success_response_code(response_code):
+        return True, "success_code"
+
+    if hash_valid:
+        return True, "verified_hash"
+
+    if txn_id:
+        return True, "transaction_id"
+
+    return False, "no_payment_evidence"
 
 
 def verify_callback_secure_hash(payload: dict[str, Any]) -> bool:
@@ -185,15 +230,30 @@ def verify_callback_secure_hash(payload: dict[str, Any]) -> bool:
     received = normalized.get("secureHashValue", "")
     if not received:
         return False
+    received_upper = str(received).upper()
     params = callback_hash_params(payload)
-    expected = generate_request_secure_hash(params)
-    if hmac.compare_digest(expected, str(received).upper()):
-        return True
-    # AMWAL may return the raw amount string in the callback URL.
+    candidates = [params]
     raw_amount = normalized.get("amount", "")
     if raw_amount and raw_amount != params["amount"]:
-        expected_raw = generate_request_secure_hash({**params, "amount": raw_amount})
-        return hmac.compare_digest(expected_raw, str(received).upper())
+        candidates.append({**params, "amount": raw_amount})
+    candidates.append(
+        {
+            "Amount": params["amount"],
+            "CurrencyId": params["currencyId"],
+            "CustomerId": params["customerId"],
+            "CustomerTokenId": params["customerTokenId"],
+            "MerchantId": params["merchantId"],
+            "MerchantReference": params["merchantReference"],
+            "ResponseCode": params["responseCode"],
+            "TerminalId": params["terminalId"],
+            "TransactionId": params["transactionId"],
+            "TransactionTime": params["transactionTime"],
+        }
+    )
+    for candidate in candidates:
+        expected = generate_request_secure_hash(candidate)
+        if hmac.compare_digest(expected, received_upper):
+            return True
     return False
 
 

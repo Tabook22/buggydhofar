@@ -48,7 +48,25 @@ export function hasAmwalCallbackParams(searchParams: URLSearchParams): boolean {
   return Object.values(CALLBACK_FIELD_ALIASES).some((aliases) => aliases.some((key) => searchParams.has(key)));
 }
 
+const SUCCESS_RESPONSE_CODES = new Set(["00", "0", "000", "0000", "00000"]);
+
+export function hasAmwalTransactionId(data: Record<string, string>): boolean {
+  return Boolean((data.transactionId || "").trim());
+}
+
 export function hasSuccessfulAmwalCallback(data: Record<string, string>): boolean {
+  const txn = (data.transactionId || "").trim();
+  if (!txn) return false;
   const code = (data.responseCode || "").trim();
-  return Boolean(data.transactionId) && (code === "00" || code === "0" || code === "000");
+  if (!code) return true;
+  return SUCCESS_RESPONSE_CODES.has(code);
+}
+
+export function shouldRetryPaymentCompletion(data: Record<string, string> | null): boolean {
+  return Boolean(data && hasAmwalTransactionId(data));
+}
+
+export function shouldDismissAfterFailedPayment(data: Record<string, string> | null): boolean {
+  if (!data) return true;
+  return !hasAmwalTransactionId(data);
 }

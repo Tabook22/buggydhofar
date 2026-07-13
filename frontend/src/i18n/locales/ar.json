@@ -170,6 +170,8 @@
     "visaBookingCancelledTitle": "تم إلغاء الحجز",
     "visaBookingCancelledMessage": "لم يكتمل الدفع أونلاين. تم إلغاء هذا الحجز ولم يتم حفظه. يمكنك إنشاء حجز جديد في أي وقت.",
     "visaBookingCancelledHint": "لم يتم تأكيد أي دفع لهذا الحجز.",
+    "paymentConfirming": "جاري تأكيد الدفع…",
+    "paymentConfirmingHint": "يرجى الانتظار بينما نتحقق من الدفع مع البنك.",
     "nationalId": "رقم الهوية / الإقامة",
     "nationalIdPlaceholder": "رقم البطاقة المدنية أو الإقامة",
     "waiverTitle": "إقرار وإخلاء مسؤولية",

@@ -166,6 +166,8 @@ export default function BookingPage() {
               goToConfirmation({ ...booking, payment_status: "paid", booking_status: "paid" }, true);
             } else if (callbackData && hasSuccessfulAmwalCallback(callbackData)) {
               goToConfirmation(booking, false);
+            } else if (callbackData && hasSuccessfulAmwalCallback(callbackData)) {
+              goToConfirmation(booking, false);
             } else {
               clearPaymentCompleting();
               await abandonUnpaidBooking(booking, true);
@@ -173,6 +175,8 @@ export default function BookingPage() {
             }
           } catch (error) {
             if (callbackData && hasSuccessfulAmwalCallback(callbackData)) {
+              goToConfirmation(booking, false);
+            } else if (callbackData?.transactionId) {
               goToConfirmation(booking, false);
             } else {
               clearPaymentCompleting();

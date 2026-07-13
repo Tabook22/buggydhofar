@@ -1029,27 +1029,33 @@ def complete_amwal_payment(
         )
     callback_data = payload.model_dump(exclude={"booking_id", "check_in_token"}, exclude_none=True)
     normalized_callback = amwal.normalize_callback_payload(callback_data)
-    hash_valid = amwal.verify_callback_secure_hash(callback_data)
-    if not hash_valid and not amwal.is_trusted_payment_success(callback_data):
-        raise HTTPException(status_code=400, detail="Payment verification failed.")
-    if not hash_valid:
-        logger.warning(
-            "AMWAL hash mismatch for booking %s (ref=%s) — accepting trusted success callback",
-            booking.id,
-            normalized_callback.get("merchantReference"),
-        )
     merchant_reference = normalized_callback.get("merchantReference") or (payload.merchantReference or "")
-    if merchant_reference and merchant_reference != booking.booking_number:
+    if not amwal.merchant_reference_matches(booking.booking_number, merchant_reference, booking.id):
         raise HTTPException(status_code=400, detail="Booking reference mismatch.")
-    response_code = normalized_callback.get("responseCode") or payload.responseCode
-    if not amwal.is_success_response_code(response_code):
-        booking_lifecycle.delete_unpaid_visa_booking(db, booking, force=True)
+
+    should_pay, pay_reason = amwal.should_mark_booking_paid_from_callback(callback_data)
+    if not should_pay:
+        txn_id = normalized_callback.get("transactionId", "").strip()
+        if not txn_id:
+            booking_lifecycle.delete_unpaid_visa_booking(db, booking, force=True)
         return schemas.AmwalPaymentResultOut(
             success=False,
-            payment_status="cancelled",
-            booking_status="deleted",
-            message="Payment was not successful. Your booking has been cancelled.",
+            payment_status="cancelled" if not txn_id else booking.payment_status,
+            booking_status="deleted" if not txn_id else booking.booking_status,
+            message="Payment was not successful. Your booking has been cancelled."
+            if not txn_id
+            else "Payment could not be verified yet. Please wait or contact support.",
         )
+
+    if pay_reason in {"transaction_id", "success_code"} and not amwal.verify_callback_secure_hash(callback_data):
+        logger.warning(
+            "AMWAL callback accepted for booking %s (reason=%s, ref=%s, txn=%s)",
+            booking.id,
+            pay_reason,
+            merchant_reference,
+            normalized_callback.get("transactionId"),
+        )
+
     _mark_booking_paid(booking, db, background_tasks)
     return schemas.AmwalPaymentResultOut(
         success=True,
@@ -1087,15 +1093,25 @@ def abandon_amwal_payment(payload: schemas.AmwalAbandonRequest, db: Session = De
 def amwal_cloud_notification(payload: dict, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     if not amwal.amwal_configured():
         raise HTTPException(status_code=503, detail="Online payment is not configured yet.")
-    if not amwal.verify_cloud_notification_secure_hash(payload):
+    hash_valid = amwal.verify_cloud_notification_secure_hash(payload)
+    response_code = payload.get("ResponseCode")
+    success = amwal.is_success_response_code(response_code)
+    if not hash_valid and not success:
         raise HTTPException(status_code=400, detail="Invalid notification signature.")
     merchant_reference = payload.get("MerchantReference")
     if not merchant_reference:
         return {"success": True, "message": "success"}
+    if not hash_valid:
+        logger.warning(
+            "AMWAL notify hash mismatch for merchant ref %s (response=%s)",
+            merchant_reference,
+            response_code,
+        )
     booking = db.query(models.Booking).filter(models.Booking.booking_number == str(merchant_reference)).first()
-    if booking and booking.payment_status != "paid":
-        if amwal.is_success_response_code(payload.get("ResponseCode")):
-            _mark_booking_paid(booking, db, background_tasks)
+    if not booking and str(merchant_reference).isdigit():
+        booking = db.get(models.Booking, int(merchant_reference))
+    if booking and booking.payment_status != "paid" and success:
+        _mark_booking_paid(booking, db, background_tasks)
     return {"success": True, "message": "success"}
 
 

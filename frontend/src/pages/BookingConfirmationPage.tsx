@@ -5,7 +5,12 @@ import { XCircle } from "lucide-react";
 import { api, BookingResult } from "../api/client";
 import { BookingConfirmationCard } from "../components/BookingConfirmationCard";
 import { PageShell } from "../components/Layout";
-import { hasAmwalCallbackParams, normalizeAmwalCallback } from "../lib/amwalCallback";
+import {
+  hasAmwalCallbackParams,
+  normalizeAmwalCallback,
+  shouldDismissAfterFailedPayment,
+  shouldRetryPaymentCompletion
+} from "../lib/amwalCallback";
 import {
   clearPaymentCompleting,
   clearBookingSession,
@@ -18,7 +23,7 @@ function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-async function loadPaidBooking(token: string, attempts = 10): Promise<BookingResult | null> {
+async function loadPaidBooking(token: string, attempts = 20): Promise<BookingResult | null> {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       const booking = await api.getBookingConfirmation(token);
@@ -29,16 +34,34 @@ async function loadPaidBooking(token: string, attempts = 10): Promise<BookingRes
       // Retry while payment confirmation propagates.
     }
     if (attempt < attempts - 1) {
-      await sleep(600);
+      await sleep(700);
     }
   }
   return null;
 }
 
-async function dismissUnpaidVisaIfNeeded(token: string, booking: BookingResult): Promise<boolean> {
-  if (!shouldDismissFailedVisa(booking)) {
-    return false;
+async function tryCompletePayment(
+  token: string,
+  callbackData: Record<string, string>,
+  attempts = 6
+): Promise<boolean> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const payment = await api.completeAmwalPayment(null, callbackData, token);
+      if (payment.success) {
+        return true;
+      }
+    } catch {
+      // Gateway may still be finalizing — retry.
+    }
+    if (attempt < attempts - 1) {
+      await sleep(800 * (attempt + 1));
+    }
   }
+  return false;
+}
+
+async function dismissUnpaidVisaIfNeeded(token: string, booking: BookingResult): Promise<boolean> {
   try {
     const result = await api.dismissFailedVisaBooking(token);
     return result.cancelled;
@@ -81,30 +104,38 @@ export default function BookingConfirmationPage() {
 
         if (callbackData) {
           markPaymentCompleting();
-          try {
-            const payment = await api.completeAmwalPayment(null, callbackData, token);
-            if (payment.success) {
-              resolvedBooking = await loadPaidBooking(token);
-              if (!cancelled) {
-                setPaymentJustCompleted(true);
-              }
-            } else if (!cancelled) {
-              clearPaymentCompleting();
-              setPaymentError(payment.message || t("booking.visaBookingCancelledMessage"));
-            }
-          } catch (error) {
-            if (!cancelled) {
-              clearPaymentCompleting();
-              setPaymentError(error instanceof Error ? error.message : t("booking.paymentFailed"));
-            }
+          const completed = await tryCompletePayment(token, callbackData);
+          resolvedBooking = await loadPaidBooking(token);
+          if (!cancelled && resolvedBooking?.payment_status === "paid") {
+            setPaymentJustCompleted(true);
+            clearPaymentCompleting();
+          } else if (!cancelled && shouldRetryPaymentCompletion(callbackData)) {
+            clearPaymentCompleting();
+            setPaymentError(t("booking.paymentConfirming"));
+          } else if (!cancelled && !completed) {
+            clearPaymentCompleting();
+            setPaymentError(t("booking.visaBookingCancelledMessage"));
           }
         }
 
-        if (!resolvedBooking) {
-          resolvedBooking = await loadBooking().catch(() => null);
+        if (!resolvedBooking || resolvedBooking.payment_status !== "paid") {
+          const latest = await loadBooking().catch(() => null);
+          if (latest?.payment_status === "paid") {
+            resolvedBooking = latest;
+            if (!cancelled) {
+              setPaymentJustCompleted(true);
+            }
+          } else if (!resolvedBooking) {
+            resolvedBooking = latest;
+          }
         }
 
-        if (resolvedBooking && shouldDismissFailedVisa(resolvedBooking) && !cancelled) {
+        const canDismiss = shouldDismissAfterFailedPayment(callbackData);
+        if (
+          resolvedBooking &&
+          shouldDismissFailedVisa(resolvedBooking, canDismiss) &&
+          !cancelled
+        ) {
           await dismissUnpaidVisaIfNeeded(token, resolvedBooking);
           clearBookingSession();
           setBooking(null);
@@ -113,7 +144,10 @@ export default function BookingConfirmationPage() {
         }
 
         if (!cancelled) {
-          setBooking(resolvedBooking);
+          setBooking(resolvedBooking?.payment_status === "paid" ? resolvedBooking : null);
+          if (resolvedBooking?.payment_status === "paid") {
+            setPaymentError("");
+          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -185,6 +219,7 @@ export default function BookingConfirmationPage() {
           {loading && (
             <div className="glass mx-auto max-w-2xl rounded-[2rem] p-10 text-center">
               <p className="text-lg font-bold text-forest-300">{t("availability.loading")}</p>
+              <p className="mt-3 text-sm text-white/55">{t("booking.paymentConfirmingHint")}</p>
             </div>
           )}
 

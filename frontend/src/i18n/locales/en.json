@@ -170,6 +170,8 @@
     "visaBookingCancelledTitle": "Booking cancelled",
     "visaBookingCancelledMessage": "Your online payment was not completed. This booking has been cancelled and was not saved. You can start a new booking anytime.",
     "visaBookingCancelledHint": "No charge was confirmed for this booking.",
+    "paymentConfirming": "Confirming your payment…",
+    "paymentConfirmingHint": "Please wait while we verify your payment with the bank.",
     "nationalId": "National / Resident ID",
     "nationalIdPlaceholder": "Civil ID or residency number",
     "waiverTitle": "Liability waiver & release",
