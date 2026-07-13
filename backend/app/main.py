@@ -950,20 +950,12 @@ def init_amwal_payment(payload: schemas.AmwalInitRequest, db: Session = Depends(
     merchant_reference = booking.booking_number or str(booking.id)
     check_in_token = booking.check_in_token or ""
     try:
-        if amwal.apple_pay_enabled():
-            config = amwal.build_apple_pay_configure(
-                amount=float(booking.total_price),
-                merchant_reference=merchant_reference,
-                language_id=language,
-                check_in_token=check_in_token,
-            )
-        else:
-            config = amwal.build_smartbox_configure(
-                amount=float(booking.total_price),
-                merchant_reference=merchant_reference,
-                language_id=language,
-                check_in_token=check_in_token,
-            )
+        config = amwal.build_smartbox_configure(
+            amount=float(booking.total_price),
+            merchant_reference=merchant_reference,
+            language_id=language,
+            check_in_token=check_in_token,
+        )
     except ValueError as exc:
         logger.exception("AMWAL configuration error for booking %s", booking.id)
         raise HTTPException(status_code=400, detail=str(exc)) from exc

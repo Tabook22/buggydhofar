@@ -45,25 +45,47 @@ declare global {
 
 let scriptLoading: Promise<void> | null = null;
 
+const SMARTBOX_INIT_TIMEOUT_MS = 8000;
+
 export function isApplePaySupported(): boolean {
   return typeof window.ApplePaySession !== "undefined";
 }
 
+function waitForSmartBoxCheckout(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const check = () => {
+      if (window.SmartBox?.Checkout?.showSmartBox) {
+        resolve();
+        return;
+      }
+      if (Date.now() - started >= SMARTBOX_INIT_TIMEOUT_MS) {
+        reject(new Error("AMWAL SmartBox failed to initialize"));
+        return;
+      }
+      window.setTimeout(check, 100);
+    };
+    check();
+  });
+}
+
 export function loadAmwalScript(url: string): Promise<void> {
-  if (window.SmartBox?.Checkout) {
+  if (window.SmartBox?.Checkout?.showSmartBox) {
     return Promise.resolve();
   }
   if (scriptLoading) {
     return scriptLoading;
   }
-  scriptLoading = new Promise((resolve, reject) => {
+  scriptLoading = new Promise<void>((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>("script[data-amwal-smartbox]");
     if (existing) {
-      if (window.SmartBox?.Checkout) {
+      if (window.SmartBox?.Checkout?.showSmartBox) {
         resolve();
         return;
       }
-      existing.addEventListener("load", () => resolve());
+      existing.addEventListener("load", () => {
+        void waitForSmartBoxCheckout().then(resolve).catch(reject);
+      });
       existing.addEventListener("error", () => reject(new Error("Failed to load AMWAL SmartBox")));
       return;
     }
@@ -71,9 +93,13 @@ export function loadAmwalScript(url: string): Promise<void> {
     script.src = url;
     script.async = true;
     script.dataset.amwalSmartbox = "true";
-    script.onload = () => resolve();
+    script.onload = () => {
+      void waitForSmartBoxCheckout().then(resolve).catch(reject);
+    };
     script.onerror = () => reject(new Error("Failed to load AMWAL SmartBox"));
     document.head.appendChild(script);
+  }).finally(() => {
+    scriptLoading = null;
   });
   return scriptLoading;
 }
@@ -105,11 +131,10 @@ function buildConfigurePayload(config: AmwalSmartBoxConfig, callbacks: AmwalCall
     cancelCallback: callbacks.onCancel
   };
 
-  if (config.request_source) {
-    payload.RequestSource = config.request_source;
-  }
-
   if (applePay) {
+    if (config.request_source) {
+      payload.RequestSource = config.request_source;
+    }
     payload.ApplePayElementId = config.apple_pay_element_id || "apple_pay_button";
     if (config.required_billing_contact_fields?.length) {
       payload.RequiredBillingContactFields = config.required_billing_contact_fields;
@@ -125,7 +150,7 @@ function buildConfigurePayload(config: AmwalSmartBoxConfig, callbacks: AmwalCall
 async function configureCheckout(config: AmwalSmartBoxConfig, callbacks: AmwalCallbacks, applePay = false) {
   await loadAmwalScript(config.script_url);
   const checkout = window.SmartBox?.Checkout;
-  if (!checkout) {
+  if (!checkout?.showSmartBox) {
     throw new Error("AMWAL SmartBox is not available");
   }
 

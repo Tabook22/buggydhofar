@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { CheckCircle2 } from "lucide-react";
-import { api, AmwalSmartBoxConfig, BookingPayload, BookingResult, PromoValidateResult, RouteExperience, Vehicle } from "../api/client";
+import { api, BookingPayload, BookingResult, PromoValidateResult, RouteExperience, Vehicle } from "../api/client";
 import { BookingConfirmationCard } from "../components/BookingConfirmationCard";
 import { BookingSelection, BookingSummaryCard, BookingWidget, calculateTotal } from "../components/Booking";
 import { LiabilityWaiver } from "../components/LiabilityWaiver";
@@ -20,7 +20,7 @@ import {
   shouldBlockBookingPage
 } from "../lib/bookingSession";
 import { hasSuccessfulAmwalCallback, normalizeAmwalCallback } from "../lib/amwalCallback";
-import { isApplePaySupported, mountAmwalApplePay, openAmwalSmartBox } from "../lib/amwalSmartBox";
+import { openAmwalSmartBox } from "../lib/amwalSmartBox";
 import { buildConfirmationPath, loadPaidBooking } from "../lib/visaPayment";
 
 const defaultSelection = defaultBookingSelection;
@@ -50,9 +50,6 @@ export default function BookingPage() {
   const [waiverAccepted, setWaiverAccepted] = useState(false);
   const [payingOnline, setPayingOnline] = useState(false);
   const [openingCardPayment, setOpeningCardPayment] = useState(false);
-  const [amwalConfig, setAmwalConfig] = useState<AmwalSmartBoxConfig | null>(null);
-  const [showApplePay, setShowApplePay] = useState(false);
-  const [applePayReady, setApplePayReady] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [pendingVisaBooking, setPendingVisaBooking] = useState<BookingResult | null>(() => loadPendingVisaBooking());
   const [promoInput, setPromoInput] = useState("");
@@ -109,28 +106,6 @@ export default function BookingPage() {
     setPendingVisaBooking(null);
     clearPendingVisaBooking();
   }, [form.customer_name, form.national_id, form.phone, form.email]);
-
-  useEffect(() => {
-    if (!payingOnline || !showApplePay || !amwalConfig || !pendingVisaBooking || applePayReady) {
-      return;
-    }
-
-    let cancelled = false;
-    const mount = async () => {
-      const mounted = await mountAmwalApplePay(amwalConfig, buildAmwalCallbacks(pendingVisaBooking));
-      if (!cancelled) {
-        setApplePayReady(mounted);
-        if (!mounted) {
-          setShowApplePay(false);
-        }
-      }
-    };
-
-    void mount();
-    return () => {
-      cancelled = true;
-    };
-  }, [payingOnline, showApplePay, amwalConfig, pendingVisaBooking, applePayReady]);
 
   function finishConfirmation() {
     clearBookingDraft();
@@ -230,25 +205,17 @@ export default function BookingPage() {
         } finally {
           setPayingOnline(false);
           setOpeningCardPayment(false);
-          setAmwalConfig(null);
-          setShowApplePay(false);
-          setApplePayReady(false);
         }
       },
       onError: async () => {
         // AMWAL redirect after a successful charge triggers errorCallback — keep the booking.
-        setPayingOnline(false);
         setOpeningCardPayment(false);
       },
       onCancel: async () => {
         clearPaymentCompleting();
-        await abandonUnpaidBooking(booking, true);
         setPaymentError(t("booking.paymentCancelled"));
         setPayingOnline(false);
         setOpeningCardPayment(false);
-        setAmwalConfig(null);
-        setShowApplePay(false);
-        setApplePayReady(false);
       }
     };
   }
@@ -259,31 +226,17 @@ export default function BookingPage() {
     setPendingVisaBooking(booking);
     savePendingVisaBooking(booking);
     markPaymentCompleting();
-    setAmwalConfig(null);
-    setShowApplePay(false);
-    setApplePayReady(false);
     setOpeningCardPayment(false);
-    try {
-      const config = await api.initAmwalPayment(booking.id, i18n.language.startsWith("ar") ? "ar" : "en");
-      setAmwalConfig(config);
-      const applePayAvailable = Boolean(config.apple_pay_enabled && isApplePaySupported());
-      setShowApplePay(applePayAvailable);
-      if (!applePayAvailable) {
-        await openCardPayment(config, booking);
-      }
-    } catch (error) {
-      setPaymentError(error instanceof Error ? error.message : t("booking.paymentUnavailable"));
-      setPayingOnline(false);
-      setAmwalConfig(null);
-      setShowApplePay(false);
-      setApplePayReady(false);
-    }
+    await openCardPayment(booking);
   }
 
-  async function openCardPayment(config: AmwalSmartBoxConfig, booking: BookingResult) {
+  async function openCardPayment(booking: BookingResult) {
     setOpeningCardPayment(true);
+    setPaymentError("");
     try {
+      const config = await api.initAmwalPayment(booking.id, i18n.language.startsWith("ar") ? "ar" : "en");
       await openAmwalSmartBox(config, buildAmwalCallbacks(booking));
+      setOpeningCardPayment(false);
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : t("booking.paymentUnavailable"));
       setOpeningCardPayment(false);
@@ -407,30 +360,25 @@ export default function BookingPage() {
             />
           ) : payingOnline ? (
             <div className="glass mx-auto max-w-2xl rounded-[2rem] p-10 text-center">
-              <p className="text-lg font-bold text-forest-300">{t("booking.paymentProcessing")}</p>
-              <p className="mt-3 text-sm text-white/60">{t("booking.paymentProcessingHint")}</p>
+              <p className="text-lg font-bold text-forest-300">
+                {openingCardPayment ? t("booking.openingPayment") : t("booking.paymentProcessing")}
+              </p>
+              <p className="mt-3 text-sm text-white/60">{t("booking.paymentWindowHint")}</p>
               {pendingVisaBooking && (
                 <p className="mt-2 text-sm text-white/50">
                   {t("booking.paymentBookingRef", { number: pendingVisaBooking.booking_number })}
                 </p>
               )}
-              {showApplePay && !applePayReady && (
-                <p className="mt-8 text-sm text-white/50">{t("booking.applePayLoading")}</p>
+              {paymentError && (
+                <p className="mt-4 rounded-2xl bg-red-500/15 px-4 py-3 text-sm text-red-200">{paymentError}</p>
               )}
-              {showApplePay && (
-                <div className="mt-8">
-                  <p className="mb-4 text-sm font-semibold text-white/70">{t("booking.applePayTitle")}</p>
-                  <div id="apple_pay_button" className="mx-auto min-h-[48px] max-w-sm" />
-                </div>
-              )}
-              {amwalConfig && pendingVisaBooking && (
+              {pendingVisaBooking && !openingCardPayment && (
                 <button
                   type="button"
-                  disabled={openingCardPayment}
-                  onClick={() => openCardPayment(amwalConfig, pendingVisaBooking)}
-                  className="mt-8 w-full max-w-sm rounded-2xl bg-forest-500 px-6 py-4 font-bold text-white shadow-glow transition hover:bg-forest-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => openCardPayment(pendingVisaBooking)}
+                  className="mt-8 w-full max-w-sm rounded-2xl bg-forest-500 px-6 py-4 font-bold text-white shadow-glow transition hover:bg-forest-400"
                 >
-                  {openingCardPayment ? t("booking.paymentProcessing") : t("booking.payWithCard")}
+                  {t("booking.openPaymentWindow")}
                 </button>
               )}
             </div>
