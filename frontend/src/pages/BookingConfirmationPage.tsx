@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api, BookingResult } from "../api/client";
 import { BookingConfirmationCard } from "../components/BookingConfirmationCard";
 import { PageShell } from "../components/Layout";
+import { hasAmwalCallbackParams, normalizeAmwalCallback } from "../lib/amwalCallback";
 import {
   clearPaymentCompleting,
   clearBookingSession,
@@ -11,42 +12,11 @@ import {
   markPaymentCompleting
 } from "../lib/bookingSession";
 
-const AMWAL_CALLBACK_KEYS = [
-  "amount",
-  "currencyId",
-  "customerId",
-  "customerTokenId",
-  "merchantId",
-  "merchantReference",
-  "responseCode",
-  "terminalId",
-  "transactionId",
-  "transactionTime",
-  "secureHashValue"
-] as const;
-
-function readAmwalCallback(searchParams: URLSearchParams): Record<string, string> | null {
-  const data: Record<string, string> = {};
-  let found = false;
-  for (const key of AMWAL_CALLBACK_KEYS) {
-    const value = searchParams.get(key);
-    if (value) {
-      data[key] = value;
-      found = true;
-    }
-  }
-  return found ? data : null;
-}
-
-function hasAmwalCallbackParams(searchParams: URLSearchParams): boolean {
-  return AMWAL_CALLBACK_KEYS.some((key) => searchParams.has(key));
-}
-
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-async function loadPaidBooking(token: string, attempts = 6): Promise<BookingResult | null> {
+async function loadPaidBooking(token: string, attempts = 10): Promise<BookingResult | null> {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       const booking = await api.getBookingConfirmation(token);
@@ -57,7 +27,7 @@ async function loadPaidBooking(token: string, attempts = 6): Promise<BookingResu
       // Retry while payment confirmation propagates.
     }
     if (attempt < attempts - 1) {
-      await sleep(500);
+      await sleep(600);
     }
   }
   return null;
@@ -90,40 +60,31 @@ export default function BookingConfirmationPage() {
         if (cancelled) return;
         setRoutes(routeData);
 
-        const callbackData = readAmwalCallback(searchParams);
-        let resolvedBooking = await loadBooking().catch(() => null);
+        const callbackData = normalizeAmwalCallback(searchParams);
+        let resolvedBooking: BookingResult | null = null;
 
-        if (callbackData && resolvedBooking?.payment_status !== "paid") {
+        if (callbackData) {
           markPaymentCompleting();
           try {
-            const payment = await api.completeAmwalPayment(
-              resolvedBooking?.id ?? null,
-              callbackData,
-              token
-            );
+            const payment = await api.completeAmwalPayment(null, callbackData, token);
             if (payment.success) {
-              const refreshed = await loadPaidBooking(token);
-              resolvedBooking =
-                refreshed ??
-                (resolvedBooking
-                  ? { ...resolvedBooking, payment_status: "paid", booking_status: "paid" }
-                  : null);
+              resolvedBooking = await loadPaidBooking(token);
               if (!cancelled) {
                 setPaymentJustCompleted(true);
               }
-            } else {
+            } else if (!cancelled) {
               clearPaymentCompleting();
-              if (!cancelled) {
-                setPaymentError(payment.message || t("booking.paymentFailed"));
-              }
+              setPaymentError(payment.message || t("booking.paymentFailed"));
             }
           } catch (error) {
-            clearPaymentCompleting();
             if (!cancelled) {
+              clearPaymentCompleting();
               setPaymentError(error instanceof Error ? error.message : t("booking.paymentFailed"));
             }
           }
-        } else if (!resolvedBooking) {
+        }
+
+        if (!resolvedBooking) {
           resolvedBooking = await loadBooking().catch(() => null);
         }
 

@@ -305,6 +305,13 @@ def ensure_booking_check_in_columns() -> None:
             connection.execute(text("ALTER TABLE bookings ADD COLUMN checked_in_at DATETIME"))
 
 
+def ensure_booking_amwal_payment_column() -> None:
+    with engine.begin() as connection:
+        existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(bookings)"))}
+        if "amwal_payment_started_at" not in existing_columns:
+            connection.execute(text("ALTER TABLE bookings ADD COLUMN amwal_payment_started_at DATETIME"))
+
+
 def backfill_check_in_tokens(db: Session) -> int:
     missing = db.query(models.Booking).filter(models.Booking.check_in_token.is_(None)).all()
     if not missing:
@@ -445,6 +452,7 @@ def startup() -> None:
     ensure_booking_promo_columns()
     ensure_booking_waiver_columns()
     ensure_booking_check_in_columns()
+    ensure_booking_amwal_payment_column()
     ensure_admin_role_column()
     ensure_admin_permissions_column()
     ensure_payment_transfer_columns()
@@ -917,6 +925,9 @@ def init_amwal_payment(payload: schemas.AmwalInitRequest, db: Session = Depends(
         raise HTTPException(status_code=400, detail="This booking does not use online card payment.")
     if booking.payment_status == "paid":
         raise HTTPException(status_code=400, detail="This booking is already paid.")
+    booking.amwal_payment_started_at = datetime.utcnow()
+    db.commit()
+    db.refresh(booking)
     language = "ar" if payload.language_id.startswith("ar") else "en"
     merchant_reference = booking.booking_number or str(booking.id)
     check_in_token = booking.check_in_token or ""
@@ -1000,11 +1011,21 @@ def complete_amwal_payment(
             message="Already paid.",
         )
     callback_data = payload.model_dump(exclude={"booking_id", "check_in_token"}, exclude_none=True)
-    if not amwal.verify_callback_secure_hash(callback_data):
+    normalized_callback = amwal.normalize_callback_payload(callback_data)
+    hash_valid = amwal.verify_callback_secure_hash(callback_data)
+    if not hash_valid and not amwal.is_trusted_payment_success(callback_data):
         raise HTTPException(status_code=400, detail="Payment verification failed.")
-    if payload.merchantReference and payload.merchantReference != booking.booking_number:
+    if not hash_valid:
+        logger.warning(
+            "AMWAL hash mismatch for booking %s (ref=%s) — accepting trusted success callback",
+            booking.id,
+            normalized_callback.get("merchantReference"),
+        )
+    merchant_reference = normalized_callback.get("merchantReference") or (payload.merchantReference or "")
+    if merchant_reference and merchant_reference != booking.booking_number:
         raise HTTPException(status_code=400, detail="Booking reference mismatch.")
-    if not amwal.is_success_response_code(payload.responseCode):
+    response_code = normalized_callback.get("responseCode") or payload.responseCode
+    if not amwal.is_success_response_code(response_code):
         return schemas.AmwalPaymentResultOut(
             success=False,
             payment_status=booking.payment_status,
@@ -1030,7 +1051,13 @@ def abandon_amwal_payment(payload: schemas.AmwalAbandonRequest, db: Session = De
         raise HTTPException(status_code=400, detail="This booking does not use online card payment.")
     if booking_lifecycle.is_paid_booking(booking):
         return {"deleted": False, "cancelled": False, "message": "Booking is already paid."}
-    deleted = booking_lifecycle.delete_unpaid_visa_booking(db, booking)
+    if booking_lifecycle.is_amwal_payment_in_progress(booking) and not payload.force:
+        return {
+            "deleted": False,
+            "cancelled": False,
+            "message": "Payment is still processing. Your booking was kept.",
+        }
+    deleted = booking_lifecycle.delete_unpaid_visa_booking(db, booking, force=payload.force)
     return {
         "deleted": deleted,
         "cancelled": deleted,
@@ -1051,8 +1078,6 @@ def amwal_cloud_notification(payload: dict, background_tasks: BackgroundTasks, d
     if booking and booking.payment_status != "paid":
         if amwal.is_success_response_code(payload.get("ResponseCode")):
             _mark_booking_paid(booking, db, background_tasks)
-        elif booking.payment_method == "visa":
-            booking_lifecycle.delete_unpaid_visa_booking(db, booking)
     return {"success": True, "message": "success"}
 
 

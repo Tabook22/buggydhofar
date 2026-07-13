@@ -19,6 +19,7 @@ import {
   savePendingVisaBooking,
   shouldBlockBookingPage
 } from "../lib/bookingSession";
+import { hasSuccessfulAmwalCallback, normalizeAmwalCallback } from "../lib/amwalCallback";
 import { openAmwalSmartBox } from "../lib/amwalSmartBox";
 
 const defaultSelection = defaultBookingSelection;
@@ -131,11 +132,11 @@ export default function BookingPage() {
     finishConfirmation();
   }, []);
 
-  async function abandonUnpaidBooking(booking: BookingResult | null) {
-    if (isPaymentCompleting()) return;
+  async function abandonUnpaidBooking(booking: BookingResult | null, force = false) {
+    if (!force && isPaymentCompleting()) return;
     if (!booking?.id || !booking.check_in_token) return;
     try {
-      await api.abandonAmwalPayment(booking.id, booking.check_in_token);
+      await api.abandonAmwalPayment(booking.id, booking.check_in_token, force);
     } catch {
       // Best-effort cleanup; stale holds expire on the server.
     }
@@ -148,39 +149,47 @@ export default function BookingPage() {
     setPaymentError("");
     setPendingVisaBooking(booking);
     savePendingVisaBooking(booking);
+    markPaymentCompleting();
     try {
       const config = await api.initAmwalPayment(booking.id, i18n.language.startsWith("ar") ? "ar" : "en");
       await openAmwalSmartBox(config, {
         onComplete: async (data) => {
           markPaymentCompleting();
+          const callbackData = normalizeAmwalCallback(data);
           try {
             const payment = await api.completeAmwalPayment(
               booking.id,
-              data,
+              callbackData ?? data,
               booking.check_in_token ?? undefined
             );
             if (payment.success) {
               goToConfirmation({ ...booking, payment_status: "paid", booking_status: "paid" }, true);
+            } else if (callbackData && hasSuccessfulAmwalCallback(callbackData)) {
+              goToConfirmation(booking, false);
             } else {
               clearPaymentCompleting();
               await abandonUnpaidBooking(booking);
               setPaymentError(t("booking.paymentFailed"));
             }
           } catch (error) {
-            clearPaymentCompleting();
-            await abandonUnpaidBooking(booking);
-            setPaymentError(error instanceof Error ? error.message : t("booking.paymentFailed"));
+            if (callbackData && hasSuccessfulAmwalCallback(callbackData)) {
+              goToConfirmation(booking, false);
+            } else {
+              clearPaymentCompleting();
+              await abandonUnpaidBooking(booking);
+              setPaymentError(error instanceof Error ? error.message : t("booking.paymentFailed"));
+            }
           } finally {
             setPayingOnline(false);
           }
         },
         onError: async () => {
-          await abandonUnpaidBooking(booking);
-          setPaymentError(t("booking.paymentFailed"));
+          // AMWAL redirect after a successful charge triggers errorCallback — keep the booking.
           setPayingOnline(false);
         },
         onCancel: async () => {
-          await abandonUnpaidBooking(booking);
+          clearPaymentCompleting();
+          await abandonUnpaidBooking(booking, true);
           setPaymentError(t("booking.paymentCancelled"));
           setPayingOnline(false);
         }

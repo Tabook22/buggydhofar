@@ -418,6 +418,7 @@ class AmwalPaymentResultOut(BaseModel):
 class AmwalAbandonRequest(BaseModel):
     booking_id: int
     check_in_token: str
+    force: bool = False
 
 
 class AdminModulePermissions(BaseModel):

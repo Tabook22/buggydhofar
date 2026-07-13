@@ -110,6 +110,7 @@ class Booking(Base):
     waiver_language: Mapped[str | None] = mapped_column(String(10), nullable=True)
     check_in_token: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
     checked_in_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    amwal_payment_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     vehicle: Mapped[Vehicle] = relationship(back_populates="bookings")

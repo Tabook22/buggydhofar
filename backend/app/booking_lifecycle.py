@@ -109,8 +109,25 @@ def delete_booking_and_related(db: Session, booking: models.Booking, *, commit: 
         db.commit()
 
 
-def delete_unpaid_visa_booking(db: Session, booking: models.Booking, *, commit: bool = True) -> bool:
+def is_amwal_payment_in_progress(booking: models.Booking) -> bool:
+    """Visa booking with payment gateway opened — do not delete during redirect races."""
+    if is_paid_booking(booking):
+        return False
+    if booking.payment_method != "visa":
+        return False
+    return booking.amwal_payment_started_at is not None
+
+
+def delete_unpaid_visa_booking(
+    db: Session,
+    booking: models.Booking,
+    *,
+    commit: bool = True,
+    force: bool = False,
+) -> bool:
     if not is_unpaid_visa_booking(booking):
+        return False
+    if not force and is_amwal_payment_in_progress(booking):
         return False
     delete_booking_and_related(db, booking, commit=commit)
     return True
@@ -176,13 +193,16 @@ def expire_stale_pending_bookings(db: Session) -> list[models.Booking]:
     visa_cutoff = now - timedelta(minutes=VISA_PAYMENT_HOLD_MINUTES)
     default_cutoff = now - timedelta(hours=AUTO_CANCEL_HOURS)
     pending = db.query(models.Booking).filter(models.Booking.booking_status == "pending").all()
-    stale = [
-        booking
-        for booking in pending
-        if booking.payment_status != "paid"
-        and booking.created_at
-        < (visa_cutoff if booking.payment_method == "visa" else default_cutoff)
-    ]
+    stale = []
+    for booking in pending:
+        if booking.payment_status == "paid":
+            continue
+        if booking.payment_method == "visa":
+            hold_start = booking.amwal_payment_started_at or booking.created_at
+            if hold_start and hold_start < visa_cutoff:
+                stale.append(booking)
+        elif booking.created_at and booking.created_at < default_cutoff:
+            stale.append(booking)
     if not stale:
         return []
 

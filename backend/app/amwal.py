@@ -16,6 +16,21 @@ AMWAL_ENV_URLS = {
 
 SUCCESS_RESPONSE_CODES = {"00", "0", "000"}
 
+CALLBACK_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "amount": ("amount", "Amount"),
+    "currencyId": ("currencyId", "CurrencyId"),
+    "customerId": ("customerId", "CustomerId"),
+    "customerTokenId": ("customerTokenId", "CustomerTokenId"),
+    "merchantId": ("merchantId", "MerchantId"),
+    "merchantReference": ("merchantReference", "MerchantReference"),
+    "responseCode": ("responseCode", "ResponseCode"),
+    "terminalId": ("terminalId", "TerminalId"),
+    "transactionId": ("transactionId", "TransactionId"),
+    "transactionTime": ("transactionTime", "TransactionTime"),
+}
+
+HASH_FIELD_ALIASES = ("secureHashValue", "SecureHash", "secureHash")
+
 
 def amwal_configured() -> bool:
     return bool(_raw_secret_key() and _merchant_id() and _terminal_id())
@@ -128,35 +143,46 @@ def build_smartbox_request_hash(
     )
 
 
+def _first_present(payload: dict[str, Any], aliases: tuple[str, ...]) -> Any:
+    for key in aliases:
+        value = payload.get(key)
+        if value not in (None, ""):
+            return value
+    return ""
+
+
+def normalize_callback_payload(payload: dict[str, Any]) -> dict[str, str]:
+    normalized: dict[str, str] = {}
+    for canonical, aliases in CALLBACK_FIELD_ALIASES.items():
+        normalized[canonical] = str(_first_present(payload, aliases) or "")
+    for key in HASH_FIELD_ALIASES:
+        value = payload.get(key)
+        if value not in (None, ""):
+            normalized["secureHashValue"] = str(value)
+            break
+    return normalized
+
+
 def callback_hash_params(payload: dict[str, Any]) -> dict[str, str]:
-    amount_raw = payload.get("amount", "")
+    normalized = normalize_callback_payload(payload)
+    amount_raw = normalized.get("amount", "")
     amount = amount_raw
-    if amount_raw not in (None, ""):
+    if amount_raw:
         try:
             amount = format_amount(float(amount_raw))
         except (TypeError, ValueError):
-            amount = str(amount_raw)
-    return {
-        "amount": amount if amount is not None else "",
-        "currencyId": str(payload.get("currencyId", "") or ""),
-        "customerId": str(payload.get("customerId", "") or ""),
-        "customerTokenId": str(payload.get("customerTokenId", "") or ""),
-        "merchantId": str(payload.get("merchantId", "") or ""),
-        "merchantReference": str(payload.get("merchantReference", "") or ""),
-        "responseCode": str(payload.get("responseCode", "") or ""),
-        "terminalId": str(payload.get("terminalId", "") or ""),
-        "transactionId": str(payload.get("transactionId", "") or ""),
-        "transactionTime": str(payload.get("transactionTime", "") or ""),
-    }
+            amount = amount_raw
+    return {**normalized, "amount": amount}
+
+
+def is_trusted_payment_success(payload: dict[str, Any]) -> bool:
+    normalized = normalize_callback_payload(payload)
+    return bool(normalized.get("transactionId")) and is_success_response_code(normalized.get("responseCode"))
 
 
 def verify_callback_secure_hash(payload: dict[str, Any]) -> bool:
-    received = (
-        payload.get("secureHashValue")
-        or payload.get("SecureHash")
-        or payload.get("secureHash")
-        or ""
-    )
+    normalized = normalize_callback_payload(payload)
+    received = normalized.get("secureHashValue", "")
     if not received:
         return False
     params = callback_hash_params(payload)
@@ -164,9 +190,9 @@ def verify_callback_secure_hash(payload: dict[str, Any]) -> bool:
     if hmac.compare_digest(expected, str(received).upper()):
         return True
     # AMWAL may return the raw amount string in the callback URL.
-    raw_params = {**params, "amount": str(payload.get("amount", "") or "")}
-    if raw_params["amount"] != params["amount"]:
-        expected_raw = generate_request_secure_hash(raw_params)
+    raw_amount = normalized.get("amount", "")
+    if raw_amount and raw_amount != params["amount"]:
+        expected_raw = generate_request_secure_hash({**params, "amount": raw_amount})
         return hmac.compare_digest(expected_raw, str(received).upper())
     return False
 

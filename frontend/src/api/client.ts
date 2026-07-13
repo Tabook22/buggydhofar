@@ -619,10 +619,10 @@ export const api = {
         ...callbackData
       })
     }),
-  abandonAmwalPayment: (bookingId: number, checkInToken: string) =>
+  abandonAmwalPayment: (bookingId: number, checkInToken: string, force = false) =>
     request<{ deleted: boolean; cancelled: boolean; message: string }>("/api/payments/amwal/abandon", {
       method: "POST",
-      body: JSON.stringify({ booking_id: bookingId, check_in_token: checkInToken })
+      body: JSON.stringify({ booking_id: bookingId, check_in_token: checkInToken, force })
     }),
   abandonAmwalPaymentKeepalive: (bookingId: number, checkInToken: string) => {
     const body = JSON.stringify({ booking_id: bookingId, check_in_token: checkInToken });
