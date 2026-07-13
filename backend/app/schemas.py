@@ -424,6 +424,7 @@ class AmwalPaymentResultOut(BaseModel):
     payment_status: str
     booking_status: str
     message: str
+    booking: BookingOut | None = None
 
 
 class AmwalAbandonRequest(BaseModel):

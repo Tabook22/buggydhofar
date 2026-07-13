@@ -166,6 +166,7 @@ export type AmwalPaymentResult = {
   payment_status: string;
   booking_status: string;
   message: string;
+  booking?: BookingResult | null;
 };
 
 export type BookingLookupPayload = {

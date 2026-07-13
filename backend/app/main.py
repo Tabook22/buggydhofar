@@ -1040,12 +1040,22 @@ def complete_amwal_payment(
             payment_status="paid",
             booking_status=booking.booking_status,
             message="Already paid.",
+            booking=booking_to_out(booking, db),
         )
     callback_data = payload.model_dump(exclude={"booking_id", "check_in_token"}, exclude_none=True)
     normalized_callback = amwal.normalize_callback_payload(callback_data)
     merchant_reference = normalized_callback.get("merchantReference") or (payload.merchantReference or "")
-    if not amwal.merchant_reference_matches(booking.booking_number, merchant_reference, booking.id):
+    txn_id = normalized_callback.get("transactionId", "").strip()
+    ref_matches = amwal.merchant_reference_matches(booking.booking_number, merchant_reference, booking.id)
+    if merchant_reference and not ref_matches and not txn_id:
         raise HTTPException(status_code=400, detail="Booking reference mismatch.")
+    if merchant_reference and not ref_matches and txn_id:
+        logger.warning(
+            "AMWAL merchant reference mismatch for booking %s (ref=%s, txn=%s) — proceeding via token",
+            booking.id,
+            merchant_reference,
+            txn_id,
+        )
 
     should_pay, pay_reason = amwal.should_mark_booking_paid_from_callback(callback_data)
     if not should_pay:
@@ -1071,11 +1081,13 @@ def complete_amwal_payment(
         )
 
     _mark_booking_paid(booking, db, background_tasks)
+    db.refresh(booking)
     return schemas.AmwalPaymentResultOut(
         success=True,
         payment_status="paid",
         booking_status="paid",
         message="Payment successful.",
+        booking=booking_to_out(booking, db),
     )
 
 

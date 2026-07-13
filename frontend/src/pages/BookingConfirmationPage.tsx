@@ -6,7 +6,8 @@ import { api, BookingResult } from "../api/client";
 import { BookingConfirmationCard } from "../components/BookingConfirmationCard";
 import { PageShell } from "../components/Layout";
 import {
-  hasAmwalCallbackParams,
+  hasPaymentEvidence,
+  hasPaymentSuccessParam,
   normalizeAmwalCallback,
   shouldDismissAfterFailedPayment,
   shouldRetryPaymentCompletion
@@ -18,50 +19,9 @@ import {
   markPaymentCompleting
 } from "../lib/bookingSession";
 import { shouldDismissFailedVisa } from "../lib/visaBooking";
+import { callbackFromSearchParams, loadPaidBooking, tryCompletePayment } from "../lib/visaPayment";
 
-function sleep(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-async function loadPaidBooking(token: string, attempts = 20): Promise<BookingResult | null> {
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      const booking = await api.getBookingConfirmation(token);
-      if (booking.payment_status === "paid") {
-        return booking;
-      }
-    } catch {
-      // Retry while payment confirmation propagates.
-    }
-    if (attempt < attempts - 1) {
-      await sleep(700);
-    }
-  }
-  return null;
-}
-
-async function tryCompletePayment(
-  token: string,
-  callbackData: Record<string, string>,
-  attempts = 6
-): Promise<boolean> {
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      const payment = await api.completeAmwalPayment(null, callbackData, token);
-      if (payment.success) {
-        return true;
-      }
-    } catch {
-      // Gateway may still be finalizing — retry.
-    }
-    if (attempt < attempts - 1) {
-      await sleep(800 * (attempt + 1));
-    }
-  }
-  return false;
-}
-
-async function dismissUnpaidVisaIfNeeded(token: string, booking: BookingResult): Promise<boolean> {
+async function dismissUnpaidVisaIfNeeded(token: string): Promise<boolean> {
   try {
     const result = await api.dismissFailedVisaBooking(token);
     return result.cancelled;
@@ -80,7 +40,8 @@ export default function BookingConfirmationPage() {
   const [loading, setLoading] = useState(true);
   const [paymentError, setPaymentError] = useState("");
   const [bookingCancelled, setBookingCancelled] = useState(false);
-  const [paymentJustCompleted, setPaymentJustCompleted] = useState(searchParams.get("payment") === "success");
+  const [paymentJustCompleted, setPaymentJustCompleted] = useState(hasPaymentSuccessParam(searchParams));
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
   const callbackQuery = searchParams.toString();
 
   const loadBooking = useCallback(async () => {
@@ -94,65 +55,98 @@ export default function BookingConfirmationPage() {
       setLoading(true);
       setPaymentError("");
       setBookingCancelled(false);
+      setConfirmingPayment(false);
       try {
         const routeData = await api.getRoutes();
         if (cancelled) return;
         setRoutes(routeData);
 
-        const callbackData = normalizeAmwalCallback(searchParams);
+        const callbackData = callbackFromSearchParams(searchParams);
+        const paymentEvidence = hasPaymentEvidence(callbackData, searchParams);
         let resolvedBooking: BookingResult | null = null;
 
         if (callbackData) {
           markPaymentCompleting();
-          const completed = await tryCompletePayment(token, callbackData);
-          resolvedBooking = await loadPaidBooking(token);
+          setConfirmingPayment(true);
+          await tryCompletePayment(token, callbackData);
+          resolvedBooking = await loadPaidBooking(token, paymentEvidence ? 30 : 20);
           if (!cancelled && resolvedBooking?.payment_status === "paid") {
             setPaymentJustCompleted(true);
             clearPaymentCompleting();
+            setConfirmingPayment(false);
           } else if (!cancelled && shouldRetryPaymentCompletion(callbackData)) {
             clearPaymentCompleting();
+            setConfirmingPayment(true);
             setPaymentError(t("booking.paymentConfirming"));
-          } else if (!cancelled && !completed) {
-            clearPaymentCompleting();
-            setPaymentError(t("booking.visaBookingCancelledMessage"));
           }
         }
 
         if (!resolvedBooking || resolvedBooking.payment_status !== "paid") {
-          const latest = await loadBooking().catch(() => null);
-          if (latest?.payment_status === "paid") {
-            resolvedBooking = latest;
-            if (!cancelled) {
-              setPaymentJustCompleted(true);
+          if (paymentEvidence && !callbackData) {
+            setConfirmingPayment(true);
+            resolvedBooking = await loadPaidBooking(token, 30);
+          } else {
+            const latest = await loadBooking().catch(() => null);
+            if (latest?.payment_status === "paid") {
+              resolvedBooking = latest;
+              if (!cancelled) {
+                setPaymentJustCompleted(true);
+                setConfirmingPayment(false);
+              }
+            } else if (!resolvedBooking) {
+              resolvedBooking = latest;
             }
-          } else if (!resolvedBooking) {
-            resolvedBooking = latest;
           }
         }
 
-        const canDismiss = shouldDismissAfterFailedPayment(callbackData);
         if (
-          resolvedBooking &&
-          shouldDismissFailedVisa(resolvedBooking, canDismiss) &&
+          paymentEvidence &&
+          (!resolvedBooking || resolvedBooking.payment_status !== "paid") &&
           !cancelled
         ) {
-          await dismissUnpaidVisaIfNeeded(token, resolvedBooking);
+          setConfirmingPayment(true);
+          const retried = await loadPaidBooking(token, 15);
+          if (retried?.payment_status === "paid") {
+            resolvedBooking = retried;
+            setPaymentJustCompleted(true);
+            setConfirmingPayment(false);
+            setPaymentError("");
+          }
+        }
+
+        const canDismiss = shouldDismissAfterFailedPayment(callbackData, searchParams);
+        if (
+          resolvedBooking &&
+          shouldDismissFailedVisa(resolvedBooking, canDismiss, paymentEvidence) &&
+          !cancelled
+        ) {
+          await dismissUnpaidVisaIfNeeded(token);
           clearBookingSession();
           setBooking(null);
           setBookingCancelled(true);
+          setConfirmingPayment(false);
           return;
         }
 
         if (!cancelled) {
-          setBooking(resolvedBooking?.payment_status === "paid" ? resolvedBooking : null);
           if (resolvedBooking?.payment_status === "paid") {
+            setBooking(resolvedBooking);
             setPaymentError("");
+            setConfirmingPayment(false);
+          } else if (paymentEvidence) {
+            setBooking(null);
+            setConfirmingPayment(true);
+            setPaymentError(t("booking.paymentConfirming"));
+          } else {
+            setBooking(null);
+            setConfirmingPayment(false);
           }
         }
       } catch (error) {
         if (!cancelled) {
           setBooking(null);
           setPaymentError(error instanceof Error ? error.message : t("booking.passNotFound"));
+          setConfirmingPayment(false);
         }
       } finally {
         if (!cancelled) {
@@ -169,12 +163,33 @@ export default function BookingConfirmationPage() {
   const isPaid = booking?.payment_status === "paid";
 
   useEffect(() => {
+    if (!token || loading || isPaid || !confirmingPayment) return;
+
+    let cancelled = false;
+    const poll = async () => {
+      const paid = await loadPaidBooking(token, 20);
+      if (!cancelled && paid?.payment_status === "paid") {
+        setBooking(paid);
+        setPaymentJustCompleted(true);
+        setConfirmingPayment(false);
+        setPaymentError("");
+        clearPaymentCompleting();
+      }
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, loading, isPaid, confirmingPayment]);
+
+  useEffect(() => {
     if (!token || !isPaid) return;
 
     finalizePaidBookingSession();
 
     const cleanUrl = `/booking/confirmation/${token}?payment=success`;
-    if (hasAmwalCallbackParams(searchParams) || searchParams.get("payment") !== "success") {
+    if (normalizeAmwalCallback(searchParams) || searchParams.get("payment") !== "success") {
       navigate(cleanUrl, { replace: true });
     }
   }, [token, isPaid, navigate, searchParams]);
@@ -223,6 +238,13 @@ export default function BookingConfirmationPage() {
             </div>
           )}
 
+          {!loading && confirmingPayment && !booking && !bookingCancelled && (
+            <div className="glass mx-auto max-w-2xl rounded-[2rem] p-10 text-center">
+              <p className="text-lg font-bold text-forest-300">{paymentError || t("booking.paymentConfirming")}</p>
+              <p className="mt-3 text-sm text-white/55">{t("booking.paymentConfirmingHint")}</p>
+            </div>
+          )}
+
           {!loading && bookingCancelled && (
             <div className="glass mx-auto max-w-2xl rounded-[2rem] p-10 text-center">
               <XCircle className="mx-auto text-red-300" size={72} />
@@ -238,7 +260,7 @@ export default function BookingConfirmationPage() {
             </div>
           )}
 
-          {!loading && !booking && !bookingCancelled && (
+          {!loading && !booking && !bookingCancelled && !confirmingPayment && (
             <div className="glass mx-auto max-w-2xl rounded-[2rem] p-10 text-center">
               <p className="text-red-200">{paymentError || t("booking.passNotFound")}</p>
               <Link to="/" className="mt-6 inline-block font-bold text-forest-300 hover:underline">

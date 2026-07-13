@@ -84,7 +84,36 @@ export function shouldRetryPaymentCompletion(data: Record<string, string> | null
   return Boolean(data && hasAmwalTransactionId(data));
 }
 
-export function shouldDismissAfterFailedPayment(data: Record<string, string> | null): boolean {
-  if (!data) return true;
-  return !hasAmwalTransactionId(data);
+export function hasPaymentSuccessParam(searchParams: URLSearchParams): boolean {
+  return searchParams.get("payment") === "success";
+}
+
+export function hasPaymentEvidence(
+  data: Record<string, string> | null,
+  searchParams?: URLSearchParams
+): boolean {
+  if (data && hasAmwalTransactionId(data)) {
+    return true;
+  }
+  if (searchParams && hasPaymentSuccessParam(searchParams)) {
+    return true;
+  }
+  if (searchParams) {
+    const fromUrl = normalizeAmwalCallback(searchParams);
+    return Boolean(fromUrl && hasAmwalTransactionId(fromUrl));
+  }
+  return false;
+}
+
+export function shouldDismissAfterFailedPayment(
+  data: Record<string, string> | null,
+  searchParams?: URLSearchParams
+): boolean {
+  if (hasPaymentEvidence(data, searchParams)) {
+    return false;
+  }
+  if (!data && !searchParams) {
+    return false;
+  }
+  return true;
 }

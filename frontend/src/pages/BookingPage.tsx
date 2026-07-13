@@ -21,6 +21,7 @@ import {
 } from "../lib/bookingSession";
 import { hasSuccessfulAmwalCallback, normalizeAmwalCallback } from "../lib/amwalCallback";
 import { isApplePaySupported, mountAmwalApplePay, openAmwalSmartBox } from "../lib/amwalSmartBox";
+import { buildConfirmationPath, loadPaidBooking } from "../lib/visaPayment";
 
 const defaultSelection = defaultBookingSelection;
 
@@ -136,7 +137,11 @@ export default function BookingPage() {
     window.location.href = "/";
   }
 
-  function goToConfirmation(booking: BookingResult, paymentSuccess = false) {
+  async function goToConfirmation(
+    booking: BookingResult,
+    paymentSuccess = false,
+    callbackData: Record<string, string> | null = null
+  ) {
     setPaymentError("");
     setPayingOnline(false);
     setPendingVisaBooking(null);
@@ -145,12 +150,29 @@ export default function BookingPage() {
     } else {
       clearBookingDraft();
     }
-    if (booking.check_in_token) {
-      const suffix = paymentSuccess ? "?payment=success" : "";
-      navigate(`/booking/confirmation/${booking.check_in_token}${suffix}`, { replace: true });
+
+    let resolved = booking;
+    if (booking.check_in_token && (paymentSuccess || callbackData?.transactionId)) {
+      const paid = await loadPaidBooking(booking.check_in_token, paymentSuccess ? 20 : 12);
+      if (paid) {
+        resolved = paid;
+        paymentSuccess = true;
+        finalizePaidBookingSession();
+      }
+    }
+
+    if (resolved.check_in_token) {
+      navigate(
+        buildConfirmationPath(resolved.check_in_token, {
+          paymentSuccess: paymentSuccess || resolved.payment_status === "paid",
+          callbackData
+        }),
+        { replace: true }
+      );
       return;
     }
-    setConfirmedBooking(booking);
+
+    setConfirmedBooking(resolved.payment_status === "paid" ? resolved : booking);
     setConfirmed(true);
   }
 
@@ -182,9 +204,14 @@ export default function BookingPage() {
             booking.check_in_token ?? undefined
           );
           if (payment.success) {
-            goToConfirmation({ ...booking, payment_status: "paid", booking_status: "paid" }, true);
+            const paidBooking = payment.booking ?? {
+              ...booking,
+              payment_status: "paid",
+              booking_status: "paid"
+            };
+            await goToConfirmation(paidBooking, true, callbackData);
           } else if (callbackData && hasSuccessfulAmwalCallback(callbackData)) {
-            goToConfirmation(booking, false);
+            await goToConfirmation(booking, false, callbackData);
           } else {
             clearPaymentCompleting();
             await abandonUnpaidBooking(booking, true);
@@ -192,9 +219,9 @@ export default function BookingPage() {
           }
         } catch {
           if (callbackData && hasSuccessfulAmwalCallback(callbackData)) {
-            goToConfirmation(booking, false);
+            await goToConfirmation(booking, false, callbackData);
           } else if (callbackData?.transactionId) {
-            goToConfirmation(booking, false);
+            await goToConfirmation(booking, false, callbackData);
           } else {
             clearPaymentCompleting();
             await abandonUnpaidBooking(booking, true);
