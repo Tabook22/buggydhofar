@@ -168,16 +168,16 @@ export default function BookingPage() {
               goToConfirmation(booking, false);
             } else {
               clearPaymentCompleting();
-              await abandonUnpaidBooking(booking);
-              setPaymentError(t("booking.paymentFailed"));
+              await abandonUnpaidBooking(booking, true);
+              setPaymentError(t("booking.visaBookingCancelledMessage"));
             }
           } catch (error) {
             if (callbackData && hasSuccessfulAmwalCallback(callbackData)) {
               goToConfirmation(booking, false);
             } else {
               clearPaymentCompleting();
-              await abandonUnpaidBooking(booking);
-              setPaymentError(error instanceof Error ? error.message : t("booking.paymentFailed"));
+              await abandonUnpaidBooking(booking, true);
+              setPaymentError(t("booking.visaBookingCancelledMessage"));
             }
           } finally {
             setPayingOnline(false);

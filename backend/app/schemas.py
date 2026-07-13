@@ -155,10 +155,16 @@ class BookingOut(BaseModel):
     check_in_token: str | None = None
     check_in_url: str | None = None
     checked_in_at: datetime | None = None
+    payment_started: bool = False
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class BookingDismissedOut(BaseModel):
+    cancelled: bool
+    message: str
 
 
 class BookingEmailLogOut(BaseModel):

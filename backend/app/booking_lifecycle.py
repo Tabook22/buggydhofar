@@ -109,6 +109,22 @@ def delete_booking_and_related(db: Session, booking: models.Booking, *, commit: 
         db.commit()
 
 
+def is_unpaid_visa_pending_confirmation(booking: models.Booking) -> bool:
+    """Visa booking that never received confirmed payment."""
+    if is_paid_booking(booking):
+        return False
+    return (
+        booking.payment_method == "visa"
+        and booking.booking_status == "pending"
+        and booking.payment_status != "paid"
+    )
+
+
+def should_dismiss_failed_visa(booking: models.Booking) -> bool:
+    """Payment was attempted but booking is still pending — treat as cancelled."""
+    return is_unpaid_visa_pending_confirmation(booking) and booking.amwal_payment_started_at is not None
+
+
 def is_amwal_payment_in_progress(booking: models.Booking) -> bool:
     """Visa booking with payment gateway opened — do not delete during redirect races."""
     if is_paid_booking(booking):

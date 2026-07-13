@@ -219,6 +219,7 @@ export type BookingResult = {
   check_in_token: string | null;
   check_in_url: string | null;
   checked_in_at: string | null;
+  payment_started?: boolean;
   notes?: string | null;
 };
 
@@ -596,6 +597,11 @@ export const api = {
     }),
   getBookingConfirmation: (token: string) =>
     request<BookingResult>(`/api/bookings/confirmation/${encodeURIComponent(token)}`),
+  dismissFailedVisaBooking: (token: string) =>
+    request<{ cancelled: boolean; message: string }>(
+      `/api/bookings/confirmation/${encodeURIComponent(token)}/dismiss-failed-visa`,
+      { method: "POST" }
+    ),
   lookupBooking: (payload: BookingLookupPayload) =>
     request<BookingLookupResult>("/api/bookings/lookup", {
       method: "POST",

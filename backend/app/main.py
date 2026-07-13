@@ -767,6 +767,22 @@ def get_booking_confirmation(token: str, db: Session = Depends(get_db)):
     return booking_to_out(booking, db)
 
 
+@app.post("/api/bookings/confirmation/{token}/dismiss-failed-visa", response_model=schemas.BookingDismissedOut)
+def dismiss_failed_visa_booking(token: str, db: Session = Depends(get_db)):
+    booking = db.query(models.Booking).filter(models.Booking.check_in_token == token).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking_lifecycle.is_paid_booking(booking):
+        return schemas.BookingDismissedOut(cancelled=False, message="Booking is already confirmed.")
+    if not booking_lifecycle.should_dismiss_failed_visa(booking):
+        raise HTTPException(status_code=400, detail="This booking cannot be cancelled yet.")
+    booking_lifecycle.delete_unpaid_visa_booking(db, booking, force=True)
+    return schemas.BookingDismissedOut(
+        cancelled=True,
+        message="Payment was not completed. Your booking has been cancelled.",
+    )
+
+
 def _normalize_lookup_phone(value: str) -> str:
     return "".join(ch for ch in value if ch.isdigit())
 
@@ -846,6 +862,7 @@ def booking_to_lookup_out(booking: models.Booking, db: Session) -> schemas.Booki
         booking_status=booking_lifecycle.normalize_status(booking.booking_status),
         check_in_url=booking_qr.build_check_in_url(token) if token else None,
         checked_in_at=booking.checked_in_at,
+        payment_started=booking.amwal_payment_started_at is not None,
         created_at=booking.created_at,
     )
 
@@ -1026,11 +1043,12 @@ def complete_amwal_payment(
         raise HTTPException(status_code=400, detail="Booking reference mismatch.")
     response_code = normalized_callback.get("responseCode") or payload.responseCode
     if not amwal.is_success_response_code(response_code):
+        booking_lifecycle.delete_unpaid_visa_booking(db, booking, force=True)
         return schemas.AmwalPaymentResultOut(
             success=False,
-            payment_status=booking.payment_status,
-            booking_status=booking.booking_status,
-            message="Payment was not successful.",
+            payment_status="cancelled",
+            booking_status="deleted",
+            message="Payment was not successful. Your booking has been cancelled.",
         )
     _mark_booking_paid(booking, db, background_tasks)
     return schemas.AmwalPaymentResultOut(

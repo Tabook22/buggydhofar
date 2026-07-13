@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { XCircle } from "lucide-react";
 import { api, BookingResult } from "../api/client";
 import { BookingConfirmationCard } from "../components/BookingConfirmationCard";
 import { PageShell } from "../components/Layout";
@@ -11,6 +12,7 @@ import {
   finalizePaidBookingSession,
   markPaymentCompleting
 } from "../lib/bookingSession";
+import { shouldDismissFailedVisa } from "../lib/visaBooking";
 
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -33,6 +35,22 @@ async function loadPaidBooking(token: string, attempts = 10): Promise<BookingRes
   return null;
 }
 
+async function dismissUnpaidVisaIfNeeded(
+  token: string,
+  booking: BookingResult,
+  paymentAttempted: boolean
+): Promise<boolean> {
+  if (!shouldDismissFailedVisa(booking, paymentAttempted)) {
+    return false;
+  }
+  try {
+    const result = await api.dismissFailedVisaBooking(token);
+    return result.cancelled;
+  } catch {
+    return false;
+  }
+}
+
 export default function BookingConfirmationPage() {
   const { token = "" } = useParams();
   const [searchParams] = useSearchParams();
@@ -42,6 +60,7 @@ export default function BookingConfirmationPage() {
   const [routes, setRoutes] = useState<{ id: number; name_en: string; name_ar: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [paymentError, setPaymentError] = useState("");
+  const [bookingCancelled, setBookingCancelled] = useState(false);
   const [paymentJustCompleted, setPaymentJustCompleted] = useState(searchParams.get("payment") === "success");
   const callbackQuery = searchParams.toString();
 
@@ -55,13 +74,16 @@ export default function BookingConfirmationPage() {
     async function init() {
       setLoading(true);
       setPaymentError("");
+      setBookingCancelled(false);
       try {
         const routeData = await api.getRoutes();
         if (cancelled) return;
         setRoutes(routeData);
 
         const callbackData = normalizeAmwalCallback(searchParams);
+        const paymentAttempted = Boolean(callbackData);
         let resolvedBooking: BookingResult | null = null;
+        let paymentFailed = false;
 
         if (callbackData) {
           markPaymentCompleting();
@@ -72,11 +94,15 @@ export default function BookingConfirmationPage() {
               if (!cancelled) {
                 setPaymentJustCompleted(true);
               }
-            } else if (!cancelled) {
-              clearPaymentCompleting();
-              setPaymentError(payment.message || t("booking.paymentFailed"));
+            } else {
+              paymentFailed = true;
+              if (!cancelled) {
+                clearPaymentCompleting();
+                setPaymentError(payment.message || t("booking.paymentFailed"));
+              }
             }
           } catch (error) {
+            paymentFailed = true;
             if (!cancelled) {
               clearPaymentCompleting();
               setPaymentError(error instanceof Error ? error.message : t("booking.paymentFailed"));
@@ -86,6 +112,20 @@ export default function BookingConfirmationPage() {
 
         if (!resolvedBooking) {
           resolvedBooking = await loadBooking().catch(() => null);
+        }
+
+        if (resolvedBooking && !cancelled) {
+          const dismissed = await dismissUnpaidVisaIfNeeded(
+            token,
+            resolvedBooking,
+            paymentAttempted || paymentFailed
+          );
+          if (dismissed) {
+            clearBookingSession();
+            setBooking(null);
+            setBookingCancelled(true);
+            return;
+          }
         }
 
         if (!cancelled) {
@@ -164,7 +204,22 @@ export default function BookingConfirmationPage() {
             </div>
           )}
 
-          {!loading && !booking && (
+          {!loading && bookingCancelled && (
+            <div className="glass mx-auto max-w-2xl rounded-[2rem] p-10 text-center">
+              <XCircle className="mx-auto text-red-300" size={72} />
+              <h2 className="mt-6 text-3xl font-black text-red-100">{t("booking.visaBookingCancelledTitle")}</h2>
+              <p className="mt-4 text-white/70">{t("booking.visaBookingCancelledMessage")}</p>
+              <p className="mt-3 text-sm text-white/50">{t("booking.visaBookingCancelledHint")}</p>
+              <Link
+                to="/booking"
+                className="mt-8 inline-block rounded-2xl bg-forest-500 px-8 py-4 font-bold text-white shadow-glow transition hover:bg-forest-400"
+              >
+                {t("nav.book")}
+              </Link>
+            </div>
+          )}
+
+          {!loading && !booking && !bookingCancelled && (
             <div className="glass mx-auto max-w-2xl rounded-[2rem] p-10 text-center">
               <p className="text-red-200">{paymentError || t("booking.passNotFound")}</p>
               <Link to="/" className="mt-6 inline-block font-bold text-forest-300 hover:underline">
