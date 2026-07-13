@@ -14,7 +14,7 @@ AMWAL_ENV_URLS = {
     "sit": "https://test.amwalpg.com:19443/js/SmartBox.js?v=1.1",
 }
 
-SUCCESS_RESPONSE_CODES = {"00", "0"}
+SUCCESS_RESPONSE_CODES = {"00", "0", "000"}
 
 
 def amwal_configured() -> bool:
@@ -128,6 +128,28 @@ def build_smartbox_request_hash(
     )
 
 
+def callback_hash_params(payload: dict[str, Any]) -> dict[str, str]:
+    amount_raw = payload.get("amount", "")
+    amount = amount_raw
+    if amount_raw not in (None, ""):
+        try:
+            amount = format_amount(float(amount_raw))
+        except (TypeError, ValueError):
+            amount = str(amount_raw)
+    return {
+        "amount": amount if amount is not None else "",
+        "currencyId": str(payload.get("currencyId", "") or ""),
+        "customerId": str(payload.get("customerId", "") or ""),
+        "customerTokenId": str(payload.get("customerTokenId", "") or ""),
+        "merchantId": str(payload.get("merchantId", "") or ""),
+        "merchantReference": str(payload.get("merchantReference", "") or ""),
+        "responseCode": str(payload.get("responseCode", "") or ""),
+        "terminalId": str(payload.get("terminalId", "") or ""),
+        "transactionId": str(payload.get("transactionId", "") or ""),
+        "transactionTime": str(payload.get("transactionTime", "") or ""),
+    }
+
+
 def verify_callback_secure_hash(payload: dict[str, Any]) -> bool:
     received = (
         payload.get("secureHashValue")
@@ -137,20 +159,16 @@ def verify_callback_secure_hash(payload: dict[str, Any]) -> bool:
     )
     if not received:
         return False
-    params = {
-        "amount": payload.get("amount", ""),
-        "currencyId": payload.get("currencyId", ""),
-        "customerId": payload.get("customerId", ""),
-        "customerTokenId": payload.get("customerTokenId", ""),
-        "merchantId": payload.get("merchantId", ""),
-        "merchantReference": payload.get("merchantReference", ""),
-        "responseCode": payload.get("responseCode", ""),
-        "terminalId": payload.get("terminalId", ""),
-        "transactionId": payload.get("transactionId", ""),
-        "transactionTime": payload.get("transactionTime", ""),
-    }
+    params = callback_hash_params(payload)
     expected = generate_request_secure_hash(params)
-    return hmac.compare_digest(expected, str(received).upper())
+    if hmac.compare_digest(expected, str(received).upper()):
+        return True
+    # AMWAL may return the raw amount string in the callback URL.
+    raw_params = {**params, "amount": str(payload.get("amount", "") or "")}
+    if raw_params["amount"] != params["amount"]:
+        expected_raw = generate_request_secure_hash(raw_params)
+        return hmac.compare_digest(expected_raw, str(received).upper())
+    return False
 
 
 def verify_cloud_notification_secure_hash(payload: dict[str, Any]) -> bool:

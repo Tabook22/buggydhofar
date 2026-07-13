@@ -13,6 +13,7 @@ import {
   clearPaymentCompleting,
   clearPendingVisaBooking,
   finalizePaidBookingSession,
+  isPaymentCompleting,
   loadPendingVisaBooking,
   markPaymentCompleting,
   savePendingVisaBooking,
@@ -131,6 +132,7 @@ export default function BookingPage() {
   }, []);
 
   async function abandonUnpaidBooking(booking: BookingResult | null) {
+    if (isPaymentCompleting()) return;
     if (!booking?.id || !booking.check_in_token) return;
     try {
       await api.abandonAmwalPayment(booking.id, booking.check_in_token);
@@ -152,7 +154,11 @@ export default function BookingPage() {
         onComplete: async (data) => {
           markPaymentCompleting();
           try {
-            const payment = await api.completeAmwalPayment(booking.id, data);
+            const payment = await api.completeAmwalPayment(
+              booking.id,
+              data,
+              booking.check_in_token ?? undefined
+            );
             if (payment.success) {
               goToConfirmation({ ...booking, payment_status: "paid", booking_status: "paid" }, true);
             } else {

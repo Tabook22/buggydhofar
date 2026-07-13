@@ -606,10 +606,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ booking_id: bookingId, language_id: languageId })
     }),
-  completeAmwalPayment: (bookingId: number, callbackData: Record<string, unknown>) =>
+  completeAmwalPayment: (
+    bookingId: number | null,
+    callbackData: Record<string, unknown>,
+    checkInToken?: string
+  ) =>
     request<AmwalPaymentResult>("/api/payments/amwal/complete", {
       method: "POST",
-      body: JSON.stringify({ booking_id: bookingId, ...callbackData })
+      body: JSON.stringify({
+        ...(bookingId ? { booking_id: bookingId } : {}),
+        ...(checkInToken ? { check_in_token: checkInToken } : {}),
+        ...callbackData
+      })
     }),
   abandonAmwalPayment: (bookingId: number, checkInToken: string) =>
     request<{ deleted: boolean; cancelled: boolean; message: string }>("/api/payments/amwal/abandon", {

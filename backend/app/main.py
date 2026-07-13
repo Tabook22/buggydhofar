@@ -481,7 +481,6 @@ def startup() -> None:
         backfill_primary_super_admin(db)
         seed_payment_transfer_defaults(db)
         booking_lifecycle.sync_paid_booking_statuses(db)
-        booking_lifecycle.delete_all_unpaid_visa_bookings(db)
         booking_lifecycle.purge_cancelled_unpaid_visa_bookings(db)
         process_expired_pending_bookings(db)
     finally:
@@ -755,7 +754,7 @@ def get_booking_confirmation(token: str, db: Session = Depends(get_db)):
     booking = db.query(models.Booking).filter(models.Booking.check_in_token == token).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
-    if not booking_lifecycle.is_customer_facing_booking(booking):
+    if not booking_lifecycle.is_token_accessible_booking(booking):
         raise HTTPException(status_code=404, detail="Booking not found")
     return booking_to_out(booking, db)
 
@@ -966,6 +965,21 @@ def _mark_booking_paid(booking: models.Booking, db: Session, background_tasks: B
         background_tasks.add_task(email_service.send_booking_confirmed_task, booking.id)
 
 
+def _resolve_amwal_booking(db: Session, payload: schemas.AmwalCompleteRequest) -> models.Booking | None:
+    booking = db.get(models.Booking, payload.booking_id) if payload.booking_id else None
+    token = (payload.check_in_token or "").strip()
+    if not booking and token:
+        booking = db.query(models.Booking).filter(models.Booking.check_in_token == token).first()
+    merchant_reference = (payload.merchantReference or "").strip()
+    if not booking and merchant_reference:
+        booking = (
+            db.query(models.Booking)
+            .filter(models.Booking.booking_number == merchant_reference)
+            .first()
+        )
+    return booking
+
+
 @app.post("/api/payments/amwal/complete", response_model=schemas.AmwalPaymentResultOut)
 def complete_amwal_payment(
     payload: schemas.AmwalCompleteRequest,
@@ -974,15 +988,10 @@ def complete_amwal_payment(
 ):
     if not amwal.amwal_configured():
         raise HTTPException(status_code=503, detail="Online payment is not configured yet.")
-    booking = db.get(models.Booking, payload.booking_id)
-    if not booking and payload.merchantReference:
-        booking = (
-            db.query(models.Booking)
-            .filter(models.Booking.booking_number == str(payload.merchantReference).strip())
-            .first()
-        )
+    booking = _resolve_amwal_booking(db, payload)
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+    db.refresh(booking)
     if booking.payment_status == "paid":
         return schemas.AmwalPaymentResultOut(
             success=True,
@@ -990,18 +999,17 @@ def complete_amwal_payment(
             booking_status=booking.booking_status,
             message="Already paid.",
         )
-    callback_data = payload.model_dump(exclude={"booking_id"}, exclude_none=True)
+    callback_data = payload.model_dump(exclude={"booking_id", "check_in_token"}, exclude_none=True)
     if not amwal.verify_callback_secure_hash(callback_data):
         raise HTTPException(status_code=400, detail="Payment verification failed.")
     if payload.merchantReference and payload.merchantReference != booking.booking_number:
         raise HTTPException(status_code=400, detail="Booking reference mismatch.")
     if not amwal.is_success_response_code(payload.responseCode):
-        booking_lifecycle.delete_unpaid_visa_booking(db, booking)
         return schemas.AmwalPaymentResultOut(
             success=False,
-            payment_status="cancelled",
-            booking_status="deleted",
-            message="Payment was not successful. Your booking was removed.",
+            payment_status=booking.payment_status,
+            booking_status=booking.booking_status,
+            message="Payment was not successful.",
         )
     _mark_booking_paid(booking, db, background_tasks)
     return schemas.AmwalPaymentResultOut(
@@ -1468,6 +1476,7 @@ def admin_bookings(
     db: Session = Depends(get_db),
 ):
     process_expired_pending_bookings(db)
+    booking_lifecycle.sync_paid_booking_statuses(db)
     bookings = booking_archive.filter_bookings_query(db, year, month, day).all()
     return [booking_to_admin_out(booking, db) for booking in bookings]
 
@@ -1478,6 +1487,7 @@ def admin_bookings_archive(
     db: Session = Depends(get_db),
 ):
     process_expired_pending_bookings(db)
+    booking_lifecycle.sync_paid_booking_statuses(db)
     return booking_archive.build_booking_archive(db)
 
 

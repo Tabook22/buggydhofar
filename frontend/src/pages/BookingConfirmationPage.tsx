@@ -42,6 +42,27 @@ function hasAmwalCallbackParams(searchParams: URLSearchParams): boolean {
   return AMWAL_CALLBACK_KEYS.some((key) => searchParams.has(key));
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function loadPaidBooking(token: string, attempts = 6): Promise<BookingResult | null> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const booking = await api.getBookingConfirmation(token);
+      if (booking.payment_status === "paid") {
+        return booking;
+      }
+    } catch {
+      // Retry while payment confirmation propagates.
+    }
+    if (attempt < attempts - 1) {
+      await sleep(500);
+    }
+  }
+  return null;
+}
+
 export default function BookingConfirmationPage() {
   const { token = "" } = useParams();
   const [searchParams] = useSearchParams();
@@ -65,26 +86,36 @@ export default function BookingConfirmationPage() {
       setLoading(true);
       setPaymentError("");
       try {
-        const [routeData, currentBooking] = await Promise.all([api.getRoutes(), loadBooking()]);
+        const routeData = await api.getRoutes();
         if (cancelled) return;
         setRoutes(routeData);
-        if (!currentBooking) {
-          setBooking(null);
-          return;
-        }
 
-        let resolvedBooking = currentBooking;
         const callbackData = readAmwalCallback(searchParams);
-        if (callbackData && currentBooking.payment_status !== "paid") {
+        let resolvedBooking = await loadBooking().catch(() => null);
+
+        if (callbackData && resolvedBooking?.payment_status !== "paid") {
           markPaymentCompleting();
           try {
-            const payment = await api.completeAmwalPayment(currentBooking.id, callbackData);
+            const payment = await api.completeAmwalPayment(
+              resolvedBooking?.id ?? null,
+              callbackData,
+              token
+            );
             if (payment.success) {
-              const refreshed = await api.getBookingConfirmation(token);
-              resolvedBooking = refreshed ?? { ...currentBooking, payment_status: "paid", booking_status: "paid" };
-              setPaymentJustCompleted(true);
+              const refreshed = await loadPaidBooking(token);
+              resolvedBooking =
+                refreshed ??
+                (resolvedBooking
+                  ? { ...resolvedBooking, payment_status: "paid", booking_status: "paid" }
+                  : null);
+              if (!cancelled) {
+                setPaymentJustCompleted(true);
+              }
             } else {
               clearPaymentCompleting();
+              if (!cancelled) {
+                setPaymentError(payment.message || t("booking.paymentFailed"));
+              }
             }
           } catch (error) {
             clearPaymentCompleting();
@@ -92,6 +123,8 @@ export default function BookingConfirmationPage() {
               setPaymentError(error instanceof Error ? error.message : t("booking.paymentFailed"));
             }
           }
+        } else if (!resolvedBooking) {
+          resolvedBooking = await loadBooking().catch(() => null);
         }
 
         if (!cancelled) {

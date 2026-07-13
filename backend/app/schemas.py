@@ -393,7 +393,8 @@ class AmwalSmartBoxConfigOut(BaseModel):
 
 
 class AmwalCompleteRequest(BaseModel):
-    booking_id: int
+    booking_id: int | None = None
+    check_in_token: str | None = None
     amount: str | float | None = None
     currencyId: str | int | None = None
     customerId: str | None = None

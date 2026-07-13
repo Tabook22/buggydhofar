@@ -51,6 +51,19 @@ def is_customer_facing_booking(booking: models.Booking) -> bool:
     return False
 
 
+def is_token_accessible_booking(booking: models.Booking) -> bool:
+    """Bookings reachable via secret check-in token (confirmation / payment completion)."""
+    if is_customer_facing_booking(booking):
+        return True
+    if (
+        booking.payment_method == "visa"
+        and booking.payment_status != "paid"
+        and booking.booking_status != "cancelled"
+    ):
+        return True
+    return False
+
+
 def is_paid_booking(booking: models.Booking) -> bool:
     return booking.payment_status == "paid"
 
