@@ -44,7 +44,6 @@ export default function BookingPage() {
     customer_name: "",
     phone: "",
     email: "",
-    national_id: "",
     notes: ""
   });
   const [waiverAccepted, setWaiverAccepted] = useState(false);
@@ -105,7 +104,7 @@ export default function BookingPage() {
     setWaiverAccepted(false);
     setPendingVisaBooking(null);
     clearPendingVisaBooking();
-  }, [form.customer_name, form.national_id, form.phone, form.email]);
+  }, [form.customer_name, form.phone, form.email]);
 
   function finishConfirmation() {
     clearBookingDraft();
@@ -288,7 +287,6 @@ export default function BookingPage() {
       customer_name: form.customer_name.trim(),
       phone: form.phone.trim(),
       email: form.email.trim(),
-      national_id: form.national_id.trim(),
       nationality: "Guest",
       hotel_location: "",
       notes: form.notes.trim() || undefined,
@@ -336,7 +334,7 @@ export default function BookingPage() {
 
   const canSubmit =
     isBookingSelectionReady(selection) &&
-    Boolean(form.customer_name.trim() && form.phone.trim() && form.email.trim() && form.national_id.trim()) &&
+    Boolean(form.customer_name.trim() && form.phone.trim() && form.email.trim()) &&
     waiverAccepted;
 
   return (
@@ -410,17 +408,6 @@ export default function BookingPage() {
                       <input required type="email" className={inputClass} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
                     </label>
                     <label className="space-y-2 md:col-span-2">
-                      <span className="text-sm font-semibold text-white/75">{t("booking.nationalId")}</span>
-                      <input
-                        required
-                        type="text"
-                        className={inputClass}
-                        value={form.national_id}
-                        onChange={(event) => setForm({ ...form, national_id: event.target.value })}
-                        placeholder={t("booking.nationalIdPlaceholder")}
-                      />
-                    </label>
-                    <label className="space-y-2 md:col-span-2">
                       <span className="text-sm font-semibold text-white/75">{t("booking.notice")}</span>
                       <textarea className={inputClass} rows={4} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder={t("booking.noticeOptional")} />
                     </label>
@@ -464,7 +451,6 @@ export default function BookingPage() {
                   </div>
                   <LiabilityWaiver
                     customerName={form.customer_name}
-                    nationalId={form.national_id}
                     phone={form.phone}
                     email={form.email}
                     rideDate={selection.date && selection.time ? `${selection.date} ${selection.time}` : ""}

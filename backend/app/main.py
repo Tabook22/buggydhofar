@@ -659,9 +659,7 @@ def create_booking(payload: schemas.BookingCreate, background_tasks: BackgroundT
 
     if not payload.waiver_accepted:
         raise HTTPException(status_code=400, detail="You must accept the liability waiver to complete your booking.")
-    national_id = payload.national_id.strip()
-    if not national_id:
-        raise HTTPException(status_code=400, detail="National / resident ID is required for the liability waiver.")
+    national_id = (payload.national_id or "").strip() or None
 
     subtotal = fleet.server_booking_price(payload.passengers, booking_mode)
     promo_record = None
@@ -699,7 +697,6 @@ def create_booking(payload: schemas.BookingCreate, background_tasks: BackgroundT
     waiver_lang = "ar" if payload.waiver_language.startswith("ar") else "en"
     waiver_body = waiver.build_waiver_text(
         customer_name=payload.customer_name.strip(),
-        national_id=national_id,
         phone=payload.phone.strip(),
         email=str(payload.email),
         ride_date=f"{payload.date} {payload.time}",

@@ -3,7 +3,6 @@ const ORGANIZER_NAME_AR = "باجي ظفار";
 
 export type WaiverFields = {
   customerName: string;
-  nationalId: string;
   phone: string;
   email: string;
   rideDate: string;
@@ -24,7 +23,6 @@ function formatTodayDate(): string {
 
 export function buildLiabilityWaiverText(fields: WaiverFields, language: string): string {
   const customerName = placeholder(fields.customerName, "…………………………………………….");
-  const nationalId = placeholder(fields.nationalId, "………………………………");
   const phone = placeholder(fields.phone, "……………………………………..");
   const email = placeholder(fields.email, "……………………………………..");
   const rideDate = placeholder(fields.rideDate, "……………………………………..");
@@ -35,7 +33,6 @@ export function buildLiabilityWaiverText(fields: WaiverFields, language: string)
 
 أنا الموقع أدناه:
 الاسم: ${customerName}
-رقم الهوية/الإقامة: ${nationalId}
 رقم الهاتف: ${phone}
 البريد الإلكتروني: ${email}
 
@@ -58,7 +55,6 @@ export function buildLiabilityWaiverText(fields: WaiverFields, language: string)
 
 I, the undersigned:
 Name: ${customerName}
-National / Resident ID: ${nationalId}
 Mobile: ${phone}
 Email: ${email}
 

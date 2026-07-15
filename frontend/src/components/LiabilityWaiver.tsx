@@ -4,7 +4,6 @@ import { buildLiabilityWaiverText } from "../lib/liabilityWaiver";
 
 type LiabilityWaiverProps = {
   customerName: string;
-  nationalId: string;
   phone: string;
   email: string;
   rideDate: string;
@@ -14,7 +13,6 @@ type LiabilityWaiverProps = {
 
 export function LiabilityWaiver({
   customerName,
-  nationalId,
   phone,
   email,
   rideDate,
@@ -27,13 +25,13 @@ export function LiabilityWaiver({
   const waiverText = useMemo(
     () =>
       buildLiabilityWaiverText(
-        { customerName, nationalId, phone, email, rideDate },
+        { customerName, phone, email, rideDate },
         language
       ),
-    [customerName, nationalId, phone, email, rideDate, language]
+    [customerName, phone, email, rideDate, language]
   );
 
-  const canAccept = Boolean(customerName.trim() && nationalId.trim() && phone.trim() && email.trim());
+  const canAccept = Boolean(customerName.trim() && phone.trim() && email.trim());
 
   return (
     <section className="liability-waiver mt-8 rounded-2xl border border-white/10 bg-white/5 p-5 md:p-6">

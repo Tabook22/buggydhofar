@@ -10,7 +10,6 @@ WAIVER_VERSION = "2026-01"
 def build_waiver_text(
     *,
     customer_name: str,
-    national_id: str,
     phone: str,
     email: str,
     ride_date: str,
@@ -25,7 +24,6 @@ def build_waiver_text(
 
 أنا الموقع أدناه:
 الاسم: {customer_name}
-رقم الهوية/الإقامة: {national_id}
 رقم الهاتف: {phone}
 البريد الإلكتروني: {email}
 
@@ -48,7 +46,6 @@ def build_waiver_text(
 
 I, the undersigned:
 Name: {customer_name}
-National / Resident ID: {national_id}
 Mobile: {phone}
 Email: {email}
 

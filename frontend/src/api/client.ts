@@ -70,7 +70,7 @@ export type BookingPayload = {
   customer_name: string;
   phone: string;
   email: string;
-  national_id: string;
+  national_id?: string | null;
   nationality: string;
   hotel_location: string;
   date: string;

@@ -103,7 +103,7 @@ class BookingCreate(BaseModel):
     customer_name: str
     phone: str
     email: EmailStr
-    national_id: str
+    national_id: str | None = None
     nationality: str
     hotel_location: str
     date: str
