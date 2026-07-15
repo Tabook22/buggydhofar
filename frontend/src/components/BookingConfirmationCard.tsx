@@ -136,7 +136,7 @@ export function BookingConfirmationCard({
         <CheckCircle2 className="mx-auto text-forest-400" size={72} />
         <h2 className="mt-6 text-3xl font-black">{title}</h2>
         <p className="mt-3 text-white/65">{subtitle}</p>
-        {isPaid && booking.booking_number && (
+        {(isPaid || lookupMode) && booking.booking_number && (
           <p className="mt-6 text-4xl font-black tracking-[0.2em] text-forest-400">{booking.booking_number}</p>
         )}
         {isPaid && (

@@ -20,10 +20,20 @@ export function parseCheckInToken(value: string): string | null {
   try {
     const url = new URL(trimmed);
     const parts = url.pathname.split("/").filter(Boolean);
-    const checkInIndex = parts.indexOf("checkin");
-    if (checkInIndex >= 0 && parts[checkInIndex + 1]) {
-      return parts[checkInIndex + 1];
-    }
+    const tokenFromSegment = (segment: string) => {
+      const index = parts.indexOf(segment);
+      if (index >= 0 && parts[index + 1]) {
+        return parts[index + 1];
+      }
+      return null;
+    };
+    // Customer QR encodes /checkin/{token}; confirmation/verify URLs also work.
+    return (
+      tokenFromSegment("checkin") ||
+      tokenFromSegment("confirmation") ||
+      tokenFromSegment("verify") ||
+      null
+    );
   } catch {
     // Not a URL — treat as raw token.
   }

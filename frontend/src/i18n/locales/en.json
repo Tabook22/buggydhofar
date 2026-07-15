@@ -313,7 +313,7 @@
   },
   "lookup": {
     "title": "Check Your Booking",
-    "subtitle": "Enter your booking number, email, or phone number — any one is enough.",
+    "subtitle": "Scan the customer QR code, or enter booking number, email, or phone — any one is enough.",
     "bookingNumber": "Booking number",
     "bookingNumberPlaceholder": "e.g. 4521",
     "orDivider": "or",
@@ -325,7 +325,15 @@
     "statusTitle": "Your booking status",
     "statusSubtitle": "Here are the latest details for your reservation.",
     "checkedIn": "You have already checked in for this ride.",
-    "newBooking": "Need a new ride?"
+    "newBooking": "Need a new ride?",
+    "scanTitle": "Scan booking QR code",
+    "scanSubtitle": "Staff can scan the customer’s QR (from confirmation email or phone) if they forgot the booking number.",
+    "startScanner": "Open camera",
+    "stopScanner": "Close camera",
+    "scanHint": "Point the camera at the customer’s booking QR code.",
+    "cameraError": "Could not access the camera. Allow camera permission or search by booking number / email / phone.",
+    "invalidQr": "That QR code is not a valid booking code.",
+    "manualSearch": "Or search manually"
   },
   "contact": {
     "title": "Contact Us",
