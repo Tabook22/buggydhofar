@@ -578,7 +578,10 @@ export const api = {
   getVehicles: () => request<Vehicle[]>("/api/vehicles"),
   getRoutes: () => request<RouteExperience[]>("/api/routes"),
   getFleet: () => request<FleetUnit[]>("/api/fleet"),
-  getTimeSlots: () => request<{ slots: string[] }>("/api/time-slots"),
+  getTimeSlots: (date?: string) =>
+    request<{ slots: string[]; date?: string | null }>(
+      date ? `/api/time-slots?date=${encodeURIComponent(date)}` : "/api/time-slots"
+    ),
   getAvailabilityBoard: (date: string) => request<AvailabilityBoard>(`/api/availability/board?date=${encodeURIComponent(date)}`),
   getFleetAvailability: (date: string, time: string) =>
     request<FleetAvailabilityResponse>(`/api/availability/fleet?date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}`),

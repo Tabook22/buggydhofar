@@ -255,8 +255,26 @@ export function BookingWidget({
   const maxPassengers = Math.max(1, maxPassengersForAvailableBikes(availableUnits.length, selection.bookingMode));
 
   useEffect(() => {
-    api.getTimeSlots().then((data) => setTimeSlots(data.slots)).catch(() => undefined);
-  }, []);
+    let active = true;
+    api
+      .getTimeSlots(selection.date || undefined)
+      .then((data) => {
+        if (!active) return;
+        setTimeSlots(data.slots);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [selection.date]);
+
+  // Drop times that are not offered on the selected date (e.g. no 12:00 on Fridays).
+  useEffect(() => {
+    if (selection.time && timeSlots.length > 0 && !timeSlots.includes(selection.time)) {
+      update({ time: "", fleetUnitIds: [] });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to slot list / current time
+  }, [selection.time, timeSlots]);
 
   useEffect(() => {
     setPassengersDraft(String(selection.passengers));
@@ -453,7 +471,13 @@ export function BookingWidget({
         )}
         <label className="space-y-2">
           <span className="text-sm font-semibold text-white/75">{t("booking.selectDate")}</span>
-          <input className={fieldClass} type="date" value={selection.date} min={new Date().toISOString().slice(0, 10)} onChange={(event) => update({ date: event.target.value, fleetUnitIds: [] })} />
+          <input
+            className={fieldClass}
+            type="date"
+            value={selection.date}
+            min={new Date().toISOString().slice(0, 10)}
+            onChange={(event) => update({ date: event.target.value, time: "", fleetUnitIds: [] })}
+          />
         </label>
         <label className="space-y-2">
           <span className="text-sm font-semibold text-white/75">{t("booking.selectTime")}</span>

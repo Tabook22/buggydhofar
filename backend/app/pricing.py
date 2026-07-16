@@ -1,13 +1,38 @@
 """Flat buggy-bike pricing (OMR)."""
 
 import math
+from datetime import date as date_cls
 
 PRICE_1_PASSENGER = 20.0
 PRICE_PER_PASSENGER_2 = 15.0
 MAX_PASSENGERS_PER_BIKE = 2
 MAX_GROUP_PASSENGERS = 40
 
+# Standard weekdays (Sat–Thu)
 TIME_SLOTS = ["08:00", "10:00", "12:00", "14:00", "16:00", "18:00"]
+
+# Friday only — shorter morning window for prayer time, no midday slot
+FRIDAY_TIME_SLOTS = ["08:00", "10:30", "14:00", "16:00", "18:00"]
+
+# Python weekday: Monday=0 … Friday=4 … Sunday=6
+FRIDAY_WEEKDAY = 4
+
+
+def time_slots_for_date(booking_date: str | None = None) -> list[str]:
+    """Return bookable time slots for a calendar date (YYYY-MM-DD). Fridays use special slots."""
+    if not booking_date:
+        return list(TIME_SLOTS)
+    try:
+        day = date_cls.fromisoformat(booking_date.strip()[:10])
+    except ValueError:
+        return list(TIME_SLOTS)
+    if day.weekday() == FRIDAY_WEEKDAY:
+        return list(FRIDAY_TIME_SLOTS)
+    return list(TIME_SLOTS)
+
+
+def is_valid_time_slot(booking_time: str, booking_date: str | None = None) -> bool:
+    return booking_time in time_slots_for_date(booking_date)
 
 ACTIVE_BOOKING_STATUSES = ("pending", "paid")
 

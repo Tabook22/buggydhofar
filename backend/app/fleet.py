@@ -4,11 +4,12 @@ from . import booking_lifecycle, models
 from .pricing import (
     ACTIVE_BOOKING_STATUSES,
     MAX_GROUP_PASSENGERS,
-    TIME_SLOTS,
     bikes_required_for_passengers,
     calculate_booking_price,
     distribute_passengers_across_bikes,
+    is_valid_time_slot,
     normalize_booking_mode,
+    time_slots_for_date,
 )
 
 
@@ -61,7 +62,7 @@ def slot_availability(db: Session, booking_date: str) -> list[dict]:
     fleet = active_fleet_units(db)
     total = len(fleet)
     slots = []
-    for slot_time in TIME_SLOTS:
+    for slot_time in time_slots_for_date(booking_date):
         booked_count = len(booked_fleet_unit_ids(db, booking_date, slot_time))
         slots.append(
             {
@@ -112,8 +113,8 @@ def validate_group_booking(
     passengers: int,
     booking_mode: str = "group",
 ) -> None:
-    if booking_time not in TIME_SLOTS:
-        raise ValueError("Invalid time slot.")
+    if not is_valid_time_slot(booking_time, booking_date):
+        raise ValueError("Invalid time slot for the selected date.")
     if passengers < 1 or passengers > MAX_GROUP_PASSENGERS:
         raise ValueError(f"Passengers must be between 1 and {MAX_GROUP_PASSENGERS}.")
     mode = normalize_booking_mode(booking_mode)

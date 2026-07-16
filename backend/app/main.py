@@ -563,8 +563,9 @@ def submit_contact(payload: schemas.ContactCreate):
 
 
 @app.get("/api/time-slots")
-def get_time_slots():
-    return {"slots": pricing.TIME_SLOTS}
+def get_time_slots(date: str | None = None):
+    """Return bookable slots. Pass date=YYYY-MM-DD for Friday-specific schedule."""
+    return {"slots": pricing.time_slots_for_date(date), "date": date}
 
 
 @app.get("/api/fleet", response_model=list[schemas.FleetUnitOut])
@@ -586,8 +587,8 @@ def get_availability_board(date: str, db: Session = Depends(get_db)):
 
 @app.get("/api/availability/fleet")
 def get_fleet_availability(date: str, time: str, db: Session = Depends(get_db)):
-    if time not in pricing.TIME_SLOTS:
-        raise HTTPException(status_code=400, detail="Invalid time slot")
+    if not pricing.is_valid_time_slot(time, date):
+        raise HTTPException(status_code=400, detail="Invalid time slot for the selected date")
     process_expired_pending_bookings(db)
     units = fleet.active_fleet_units(db)
     booked = fleet.booked_fleet_unit_ids(db, date, time)
