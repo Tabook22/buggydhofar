@@ -9,10 +9,10 @@ MAX_PASSENGERS_PER_BIKE = 2
 MAX_GROUP_PASSENGERS = 40
 
 # Sat–Thu: full day including midday
-TIME_SLOTS = ["08:00", "10:00", "12:00", "14:00", "16:00", "18:00"]
+TIME_SLOTS = ["08:00", "10:00", "12:00", "14:00", "16:00", "17:00"]
 
 # Friday only — same slots except 12:00 is excluded (prayer time)
-FRIDAY_TIME_SLOTS = ["08:00", "10:00", "14:00", "16:00", "18:00"]
+FRIDAY_TIME_SLOTS = ["08:00", "10:00", "14:00", "16:00", "17:00"]
 
 # Python weekday: Monday=0 … Friday=4 … Sunday=6
 FRIDAY_WEEKDAY = 4

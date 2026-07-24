@@ -238,7 +238,7 @@ export function BookingWidget({
   onChange: (selection: BookingSelection) => void;
 }) {
   const { t, i18n } = useTranslation();
-  const [timeSlots, setTimeSlots] = useState<string[]>(["08:00", "10:00", "12:00", "14:00", "16:00", "18:00"]);
+  const [timeSlots, setTimeSlots] = useState<string[]>(["08:00", "10:00", "12:00", "14:00", "16:00", "17:00"]);
   const [fleetUnits, setFleetUnits] = useState<FleetUnitAvailability[]>([]);
   const [fleetLoading, setFleetLoading] = useState(false);
   const [availabilityMessage, setAvailabilityMessage] = useState("");
