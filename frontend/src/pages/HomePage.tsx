@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { BadgeCheck, MapPin, Clock, Navigation } from "lucide-react";
 
 import { AvailabilityBoard } from "../components/AvailabilityBoard";
+import { HomeAdvertisement } from "../components/HomeAdvertisement";
 import { HomeInstagramGallery } from "../components/HomeInstagramGallery";
 
 import { api, RouteExperience, SiteContent, Vehicle } from "../api/client";
@@ -317,9 +318,9 @@ export default function HomePage() {
 
       </section>
 
+      <HomeAdvertisement content={content} />
 
-
-      <section className="relative -mt-24 px-4 sm:px-6 lg:px-8">
+      <section className={`relative px-4 sm:px-6 lg:px-8 ${content?.advertisement_active && content?.advertisement_image_url ? "mt-4" : "-mt-24"}`}>
 
         <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[1fr_360px]">
 

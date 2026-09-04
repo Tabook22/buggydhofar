@@ -168,4 +168,6 @@ def site_content_to_out(content: models.SiteContent) -> schemas.SiteContentOut:
         faq_items=parse_faq_items_json(getattr(content, "faq_items_json", None)),
         contact_phone=getattr(content, "contact_phone", None) or "",
         contact_whatsapp=getattr(content, "contact_whatsapp", None) or "",
+        advertisement_image_url=getattr(content, "advertisement_image_url", None) or "/offers/add.jpeg",
+        advertisement_active=bool(getattr(content, "advertisement_active", True)),
     )

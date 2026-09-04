@@ -605,6 +605,8 @@ class SiteContentBase(BaseModel):
     faq_items: list[FaqItem] = []
     contact_phone: str = ""
     contact_whatsapp: str = ""
+    advertisement_image_url: str = "/offers/add.jpeg"
+    advertisement_active: bool = True
 
 
 class SiteContentOut(SiteContentBase):

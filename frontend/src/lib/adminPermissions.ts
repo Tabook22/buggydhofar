@@ -42,6 +42,7 @@ export const TAB_MODULE_MAP: Record<string, AdminModule> = {
   promo: "promo",
   transfer: "transfer",
   content: "content",
+  advertisement: "content",
   fleet: "fleet",
   paths: "paths",
   vehicles: "vehicles",

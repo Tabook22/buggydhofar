@@ -294,4 +294,6 @@ class SiteContent(Base):
     faq_items_json: Mapped[str] = mapped_column(Text, default="[]")
     contact_phone: Mapped[str] = mapped_column(String(80), default="")
     contact_whatsapp: Mapped[str] = mapped_column(String(80), default="")
+    advertisement_image_url: Mapped[str] = mapped_column(Text, default="/offers/add.jpeg")
+    advertisement_active: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

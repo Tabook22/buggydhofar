@@ -366,6 +366,19 @@
     "overviewSelectDay": "Select a day to view bookings",
     "overviewNoDays": "No upcoming booking days.",
     "overviewToday": "Today",
+    "tabAdvertisement": "Advertisement",
+    "advertisementTitle": "Homepage advertisement",
+    "advertisementSubtitle": "Upload an offer image. If the checkbox is on, visitors will see it on the main page.",
+    "advertisementShowOnHome": "Show this advertisement on the main page",
+    "advertisementShowHelp": "Turn this off to hide the offer without deleting the image.",
+    "advertisementImage": "Advertisement image",
+    "advertisementImageHelp": "Use a poster or offer image. Visitors can tap it to book.",
+    "advertisementPreview": "Preview",
+    "advertisementAlt": "Special buggy offer",
+    "advertisementVisibleNow": "This offer is visible on the homepage.",
+    "advertisementHiddenNow": "This offer is hidden until you tick the checkbox and save.",
+    "advertisementViewHome": "Open homepage",
+    "advertisementSave": "Save advertisement",
     "tabPricing": "Prices & VAT",
     "pricingTitle": "Buggy prices & VAT",
     "pricingSubtitle": "Set the customer price for 1 person and for 2 people sharing a bike, including VAT. Only an administrator with full permissions can change these amounts. New bookings use the saved prices immediately.",
@@ -788,7 +801,11 @@
   "home": {
     "loading": "Loading booking options…",
     "loadingMap": "Loading map…",
-    "loadError": "Some data could not be loaded. Make sure the backend is running on port 8008."
+    "loadError": "Some data could not be loaded. Make sure the backend is running on port 8008.",
+    "advertisementBadge": "Limited offer",
+    "advertisementTitle": "Special offer",
+    "advertisementAlt": "Special buggy prices this month: 16.5 OMR for one person and 26.5 OMR for two people, including tax",
+    "advertisementCta": "Book this offer"
   },
   "gallery": {
     "badge": "From Instagram",

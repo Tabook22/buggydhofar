@@ -169,6 +169,8 @@ HOME_CONTENT = {
     "how_step4_title_ar": "ادفع",
     "how_step4_text_en": "Pay by Visa or bank transfer.",
     "how_step4_text_ar": "ادفع بالفيزا أو التحويل البنكي.",
+    "advertisement_image_url": "/offers/add.jpeg",
+    "advertisement_active": True,
 }
 
 PAYMENT_TRANSFER_DEFAULTS = {
@@ -268,7 +270,18 @@ def seed_database(db: Session) -> None:
 
     normalize_fleet_size(db)
     seed_pricing_settings(db)
+    seed_advertisement_defaults(db)
     db.commit()
+
+
+def seed_advertisement_defaults(db: Session) -> None:
+    content = db.query(models.SiteContent).first()
+    if not content:
+        return
+    image = (getattr(content, "advertisement_image_url", None) or "").strip()
+    if not image:
+        content.advertisement_image_url = "/offers/add.jpeg"
+        content.advertisement_active = True
 
 
 def seed_pricing_settings(db: Session) -> None:

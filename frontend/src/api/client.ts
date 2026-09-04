@@ -344,6 +344,8 @@ export type SiteContent = {
   faq_items: FaqItem[];
   contact_phone: string;
   contact_whatsapp: string;
+  advertisement_image_url: string;
+  advertisement_active: boolean;
 };
 
 export type PaymentTransferInfo = Pick<

@@ -155,6 +155,18 @@ def ensure_footer_nav_content_columns() -> None:
                 connection.execute(text(f"ALTER TABLE site_content ADD COLUMN {column} {definition}"))
 
 
+def ensure_advertisement_columns() -> None:
+    defaults = {
+        "advertisement_image_url": "TEXT DEFAULT '/offers/add.jpeg'",
+        "advertisement_active": "BOOLEAN DEFAULT 1",
+    }
+    with engine.begin() as connection:
+        existing_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(site_content)"))}
+        for column, definition in defaults.items():
+            if column not in existing_columns:
+                connection.execute(text(f"ALTER TABLE site_content ADD COLUMN {column} {definition}"))
+
+
 def ensure_faq_contact_content_columns() -> None:
     defaults = {
         "faq_title_en": "TEXT DEFAULT 'Frequently Asked Questions'",
@@ -463,6 +475,7 @@ def startup() -> None:
     ensure_footer_nav_content_columns()
     ensure_how_steps_content_columns()
     ensure_faq_contact_content_columns()
+    ensure_advertisement_columns()
     db = SessionLocal()
     try:
         seed_database(db)

@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { LucideIcon } from "lucide-react";
-import { Bike, Building2, CalendarDays, Car, CircleDollarSign, FileText, LayoutDashboard, Map, Shield, Tag } from "lucide-react";
+import { Bike, Building2, CalendarDays, Car, CircleDollarSign, FileText, LayoutDashboard, Map, Megaphone, Shield, Tag } from "lucide-react";
 import { api, clearAdminToken, FleetUnit, isAdminAuthError, RouteExperience, SiteContent, Vehicle } from "../api/client";
 import { RealMapPathPicker, RealMapRoutePreview } from "../components/RealMapRoute";
 import { AdminBookingsPanel } from "../components/AdminBookingsPanel";
@@ -10,6 +10,7 @@ import { AdminHomepageContent } from "../components/AdminHomepageContent";
 import { AdminOverviewBookings } from "../components/AdminOverviewBookings";
 import { AdminPromoCodes } from "../components/AdminPromoCodes";
 import { AdminTransferSettings, defaultTransferSettings } from "../components/AdminTransferSettings";
+import { AdminAdvertisementSettings } from "../components/AdminAdvertisementSettings";
 import { AdminPricingSettings } from "../components/AdminPricingSettings";
 import { AdminUsersPanel } from "../components/AdminUsersPanel";
 import {
@@ -134,6 +135,7 @@ const ADMIN_TAB_STORAGE_KEY = "admin_active_tab";
 const ADMIN_TABS = [
   { id: "overview", labelKey: "admin.tabOverview", icon: LayoutDashboard },
   { id: "bookings", labelKey: "admin.bookings", icon: CalendarDays },
+  { id: "advertisement", labelKey: "admin.tabAdvertisement", icon: Megaphone },
   { id: "pricing", labelKey: "admin.tabPricing", icon: CircleDollarSign },
   { id: "promo", labelKey: "admin.tabPromo", icon: Tag },
   { id: "transfer", labelKey: "admin.tabTransfer", icon: Building2 },
@@ -222,6 +224,8 @@ const emptySiteContent: SiteContentForm = {
   faq_items: [],
   contact_phone: "",
   contact_whatsapp: "",
+  advertisement_image_url: "/offers/add.jpeg",
+  advertisement_active: true,
   ...defaultTransferSettings
 };
 
@@ -745,6 +749,20 @@ export default function AdminDashboard() {
         <div className="mt-6 space-y-6">
         <AdminBookingLinkQr embedded />
         <AdminBookingsPanel token={token} onAuthFailure={handleAuthFailure} permissions={adminSession} embedded />
+        </div>
+        )}
+
+        {activeTab === "advertisement" && (
+        <div className="mt-6">
+        <AdminAdvertisementSettings
+          embedded
+          form={siteContentForm}
+          token={token}
+          message={contentMessage}
+          readOnly={!can(adminSession, "content", "edit")}
+          onChange={(next) => setSiteContentForm((prev) => ({ ...prev, ...next }))}
+          onSave={saveSiteContent}
+        />
         </div>
         )}
 

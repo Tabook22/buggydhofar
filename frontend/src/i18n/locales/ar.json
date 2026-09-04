@@ -366,6 +366,19 @@
     "overviewSelectDay": "اختر يوماً لعرض الحجوزات",
     "overviewNoDays": "لا توجد أيام حجوزات قادمة.",
     "overviewToday": "اليوم",
+    "tabAdvertisement": "الإعلان",
+    "advertisementTitle": "إعلان الصفحة الرئيسية",
+    "advertisementSubtitle": "ارفع صورة العرض. إذا كان الصندوق مفعّلاً سيظهر الإعلان للزوار في الصفحة الرئيسية.",
+    "advertisementShowOnHome": "إظهار هذا الإعلان في الصفحة الرئيسية",
+    "advertisementShowHelp": "أوقف هذا الخيار لإخفاء العرض دون حذف الصورة.",
+    "advertisementImage": "صورة الإعلان",
+    "advertisementImageHelp": "استخدم صورة ملصق أو عرض. يمكن للزوار الضغط عليها للحجز.",
+    "advertisementPreview": "معاينة",
+    "advertisementAlt": "عرض خاص للباجي",
+    "advertisementVisibleNow": "هذا العرض ظاهر في الصفحة الرئيسية.",
+    "advertisementHiddenNow": "هذا العرض مخفي حتى تفعّل الصندوق ثم تحفظ.",
+    "advertisementViewHome": "فتح الصفحة الرئيسية",
+    "advertisementSave": "حفظ الإعلان",
     "tabPricing": "الأسعار والضريبة",
     "pricingTitle": "أسعار الباجي والضريبة",
     "pricingSubtitle": "حدد سعر العميل لشخص واحد ولشخصين على باجي واحد، شاملاً الضريبة. يمكن لمدير بصلاحيات كاملة فقط تغيير هذه المبالغ. الحجوزات الجديدة تستخدم الأسعار المحفوظة فوراً.",
@@ -788,7 +801,11 @@
   "home": {
     "loading": "جاري تحميل خيارات الحجز…",
     "loadingMap": "جاري تحميل الخريطة…",
-    "loadError": "تعذر تحميل بعض البيانات. تأكد أن الخادم يعمل على المنفذ 8008."
+    "loadError": "تعذر تحميل بعض البيانات. تأكد أن الخادم يعمل على المنفذ 8008.",
+    "advertisementBadge": "عرض محدود",
+    "advertisementTitle": "عرض خاص",
+    "advertisementAlt": "أسعار خاصة هذا الشهر: 16.5 ريال للشخص الواحد و26.5 ريال لشخصين شامل الضريبة",
+    "advertisementCta": "احجز هذا العرض"
   },
   "gallery": {
     "badge": "من إنستغرام",
