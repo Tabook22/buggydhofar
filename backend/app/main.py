@@ -570,6 +570,37 @@ def get_time_slots(date: str | None = None):
     return {"slots": pricing.time_slots_for_date(date), "date": date}
 
 
+@app.get("/api/pricing", response_model=schemas.PricingSettingsOut)
+def get_public_pricing(db: Session = Depends(get_db)):
+    return schemas.PricingSettingsOut(**pricing.settings_payload(pricing.get_pricing_settings(db)))
+
+
+@app.get("/api/admin/pricing", response_model=schemas.PricingSettingsOut)
+def get_admin_pricing(
+    _: models.Admin = Depends(perm.require_full_permissions()),
+    db: Session = Depends(get_db),
+):
+    return schemas.PricingSettingsOut(**pricing.settings_payload(pricing.get_pricing_settings(db)))
+
+
+@app.put("/api/admin/pricing", response_model=schemas.PricingSettingsOut)
+def update_admin_pricing(
+    payload: schemas.PricingSettingsUpdate,
+    _: models.Admin = Depends(perm.require_full_permissions()),
+    db: Session = Depends(get_db),
+):
+    try:
+        settings = pricing.validate_pricing_input(
+            payload.price_1_incl_vat,
+            payload.price_2_incl_vat,
+            payload.vat_percent,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    saved = pricing.save_pricing_settings(db, settings)
+    return schemas.PricingSettingsOut(**pricing.settings_payload(saved))
+
+
 @app.get("/api/fleet", response_model=list[schemas.FleetUnitOut])
 def get_fleet(db: Session = Depends(get_db)):
     return fleet.active_fleet_units(db)
@@ -664,7 +695,8 @@ def create_booking(payload: schemas.BookingCreate, background_tasks: BackgroundT
         raise HTTPException(status_code=400, detail="You must accept the liability waiver to complete your booking.")
     national_id = (payload.national_id or "").strip() or None
 
-    subtotal = fleet.server_booking_price(payload.passengers, booking_mode)
+    price_settings = pricing.get_pricing_settings(db)
+    subtotal = fleet.server_booking_price(payload.passengers, booking_mode, price_settings)
     promo_record = None
     discount_amount = 0.0
     promo_code_text = None
@@ -677,13 +709,16 @@ def create_booking(payload: schemas.BookingCreate, background_tasks: BackgroundT
         )
         promo_code_text = promo_record.code
     else:
-        tax_amount = pricing.calculate_tax(subtotal)
-        expected_price = pricing.calculate_total_with_tax(subtotal)
+        tax_amount = pricing.calculate_tax(subtotal, price_settings.vat_percent)
+        expected_price = pricing.calculate_total_with_tax(subtotal, price_settings.vat_percent)
 
     if abs(payload.total_price - expected_price) > 0.01:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid price. Expected {expected_price} OMR (including 5% tax) for {payload.passengers} passenger(s).",
+            detail=(
+                f"Invalid price. Expected {expected_price} OMR "
+                f"(including {price_settings.vat_percent:g}% tax) for {payload.passengers} passenger(s)."
+            ),
         )
 
     user = db.query(models.User).filter(models.User.email == payload.email).first()
@@ -1285,7 +1320,8 @@ def validate_promo_code(payload: schemas.PromoValidateRequest, db: Session = Dep
     if payload.passengers < 1:
         raise HTTPException(status_code=400, detail="At least one passenger is required.")
     booking_mode = pricing.normalize_booking_mode(payload.booking_mode)
-    subtotal = fleet.server_booking_price(payload.passengers, booking_mode)
+    price_settings = pricing.get_pricing_settings(db)
+    subtotal = fleet.server_booking_price(payload.passengers, booking_mode, price_settings)
     try:
         promo, _, discount_amount, tax_amount, total_price = promo_codes.validate_promo_for_booking(
             db,
@@ -1301,8 +1337,8 @@ def validate_promo_code(payload: schemas.PromoValidateRequest, db: Session = Dep
             discount_value=0,
             subtotal=subtotal,
             discount_amount=0,
-            tax_amount=pricing.calculate_tax(subtotal),
-            total_price=pricing.calculate_total_with_tax(subtotal),
+            tax_amount=pricing.calculate_tax(subtotal, price_settings.vat_percent),
+            total_price=pricing.calculate_total_with_tax(subtotal, price_settings.vat_percent),
             message=str(exc.detail),
         )
     return schemas.PromoValidateOut(

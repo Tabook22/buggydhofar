@@ -194,6 +194,18 @@ class Admin(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class PricingSettings(Base):
+    """Single-row table for live 1-person / 2-person prices and VAT."""
+
+    __tablename__ = "pricing_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    price_1_incl_vat: Mapped[float] = mapped_column(Float, default=16.5)
+    price_2_incl_vat: Mapped[float] = mapped_column(Float, default=26.5)
+    vat_percent: Mapped[float] = mapped_column(Float, default=5.0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class SiteContent(Base):
     __tablename__ = "site_content"
 

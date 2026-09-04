@@ -175,5 +175,5 @@ def backfill_booking_bikes(db: Session) -> int:
     return len(missing)
 
 
-def server_booking_price(passengers: int, booking_mode: str = "group") -> float:
-    return calculate_booking_price(passengers, booking_mode)
+def server_booking_price(passengers: int, booking_mode: str = "group", settings=None) -> float:
+    return calculate_booking_price(passengers, booking_mode, settings)

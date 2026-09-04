@@ -54,12 +54,16 @@ def calculate_discount_amount(subtotal: float, promo: models.PromoCode) -> float
     return min(amount, subtotal)
 
 
-def build_discounted_totals(subtotal: float, promo: models.PromoCode | None) -> tuple[float, float, float, float]:
+def build_discounted_totals(
+    subtotal: float,
+    promo: models.PromoCode | None,
+    vat_percent: float | None = None,
+) -> tuple[float, float, float, float]:
     subtotal = round(float(subtotal), 2)
     discount_amount = calculate_discount_amount(subtotal, promo) if promo else 0.0
     discounted_subtotal = round(subtotal - discount_amount, 2)
-    tax_amount = pricing.calculate_tax(discounted_subtotal)
-    total_price = pricing.calculate_total_with_tax(discounted_subtotal)
+    tax_amount = pricing.calculate_tax(discounted_subtotal, vat_percent)
+    total_price = pricing.calculate_total_with_tax(discounted_subtotal, vat_percent)
     return subtotal, discount_amount, tax_amount, total_price
 
 
@@ -95,7 +99,8 @@ def validate_promo_for_booking(
     if not promo_has_uses_remaining(promo):
         raise HTTPException(status_code=400, detail="This promo code has reached its usage limit.")
 
-    subtotal, discount_amount, tax_amount, total_price = build_discounted_totals(subtotal, promo)
+    vat_percent = pricing.get_pricing_settings(db).vat_percent
+    subtotal, discount_amount, tax_amount, total_price = build_discounted_totals(subtotal, promo, vat_percent)
     if consume:
         promo.used_count += 1
     return promo, subtotal, discount_amount, tax_amount, total_price

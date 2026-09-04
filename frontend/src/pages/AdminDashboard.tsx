@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { LucideIcon } from "lucide-react";
-import { Bike, Building2, CalendarDays, Car, FileText, LayoutDashboard, Map, Shield, Tag } from "lucide-react";
+import { Bike, Building2, CalendarDays, Car, CircleDollarSign, FileText, LayoutDashboard, Map, Shield, Tag } from "lucide-react";
 import { api, clearAdminToken, FleetUnit, isAdminAuthError, RouteExperience, SiteContent, Vehicle } from "../api/client";
 import { RealMapPathPicker, RealMapRoutePreview } from "../components/RealMapRoute";
 import { AdminBookingsPanel } from "../components/AdminBookingsPanel";
@@ -10,6 +10,7 @@ import { AdminHomepageContent } from "../components/AdminHomepageContent";
 import { AdminOverviewBookings } from "../components/AdminOverviewBookings";
 import { AdminPromoCodes } from "../components/AdminPromoCodes";
 import { AdminTransferSettings, defaultTransferSettings } from "../components/AdminTransferSettings";
+import { AdminPricingSettings } from "../components/AdminPricingSettings";
 import { AdminUsersPanel } from "../components/AdminUsersPanel";
 import {
   AdminSession,
@@ -133,6 +134,7 @@ const ADMIN_TAB_STORAGE_KEY = "admin_active_tab";
 const ADMIN_TABS = [
   { id: "overview", labelKey: "admin.tabOverview", icon: LayoutDashboard },
   { id: "bookings", labelKey: "admin.bookings", icon: CalendarDays },
+  { id: "pricing", labelKey: "admin.tabPricing", icon: CircleDollarSign },
   { id: "promo", labelKey: "admin.tabPromo", icon: Tag },
   { id: "transfer", labelKey: "admin.tabTransfer", icon: Building2 },
   { id: "content", labelKey: "admin.tabContent", icon: FileText },
@@ -743,6 +745,12 @@ export default function AdminDashboard() {
         <div className="mt-6 space-y-6">
         <AdminBookingLinkQr embedded />
         <AdminBookingsPanel token={token} onAuthFailure={handleAuthFailure} permissions={adminSession} embedded />
+        </div>
+        )}
+
+        {activeTab === "pricing" && (
+        <div className="mt-6">
+        <AdminPricingSettings token={token} onAuthFailure={handleAuthFailure} embedded />
         </div>
         )}
 

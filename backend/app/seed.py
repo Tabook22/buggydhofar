@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from . import models
+from . import models, pricing
 from .auth import hash_password
 
 FLEET_DEFAULT_SIZE = 20
@@ -267,4 +267,18 @@ def seed_database(db: Session) -> None:
         )
 
     normalize_fleet_size(db)
+    seed_pricing_settings(db)
     db.commit()
+
+
+def seed_pricing_settings(db: Session) -> None:
+    if db.query(models.PricingSettings).first():
+        return
+    defaults = pricing.default_pricing_settings()
+    db.add(
+        models.PricingSettings(
+            price_1_incl_vat=defaults.price_1_incl_vat,
+            price_2_incl_vat=defaults.price_2_incl_vat,
+            vat_percent=defaults.vat_percent,
+        )
+    )

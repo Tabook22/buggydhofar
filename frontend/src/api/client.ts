@@ -406,15 +406,33 @@ export function groupTypeDetailRow(
   return [t("booking.groupType"), groupTypeLabel(type, language)];
 }
 
-// Advertised totals including 5% VAT: 16.50 (1 person) and 26.50 (2 sharing).
-// These constants are pre-VAT so the checkout tax line adds up exactly.
-export const BUGGY_PRICE_1_PASSENGER = 15.71; // 16.50 incl. 5% VAT
-export const BUGGY_PRICE_2_PASSENGERS = 25.24; // 26.50 incl. 5% VAT
+export type PublicPricing = {
+  price_1_incl_vat: number;
+  price_2_incl_vat: number;
+  vat_percent: number;
+  price_1_pre_vat: number;
+  price_2_pre_vat: number;
+  price_1_vat_amount: number;
+  price_2_vat_amount: number;
+};
+
+export const DEFAULT_PUBLIC_PRICING: PublicPricing = {
+  price_1_incl_vat: 16.5,
+  price_2_incl_vat: 26.5,
+  vat_percent: 5,
+  price_1_pre_vat: 15.71,
+  price_2_pre_vat: 25.24,
+  price_1_vat_amount: 0.79,
+  price_2_vat_amount: 1.26
+};
+
+export const BUGGY_PRICE_1_PASSENGER = DEFAULT_PUBLIC_PRICING.price_1_pre_vat;
+export const BUGGY_PRICE_2_PASSENGERS = DEFAULT_PUBLIC_PRICING.price_2_pre_vat;
 export const BUGGY_PRICE_PER_PASSENGER_2 = BUGGY_PRICE_2_PASSENGERS / 2;
 export const MAX_PASSENGERS_PER_BIKE = 2;
 export const MAX_GROUP_PASSENGERS = 40;
-export const TAX_RATE = 0.05;
-export const TAX_PERCENT = 5;
+export const TAX_RATE = DEFAULT_PUBLIC_PRICING.vat_percent / 100;
+export const TAX_PERCENT = DEFAULT_PUBLIC_PRICING.vat_percent;
 
 export function normalizeBookingMode(mode: string | undefined): BookingMode {
   return mode === "individual" ? "individual" : "group";
@@ -426,45 +444,57 @@ export function bikesRequiredForPassengers(passengers: number, mode: BookingMode
   return Math.ceil(count / MAX_PASSENGERS_PER_BIKE);
 }
 
-export function calculateBuggyPrice(passengers: number) {
-  if (passengers === 1) return BUGGY_PRICE_1_PASSENGER;
-  if (passengers === 2) return BUGGY_PRICE_2_PASSENGERS;
+export function calculateBuggyPrice(passengers: number, pricing: PublicPricing = DEFAULT_PUBLIC_PRICING) {
+  if (passengers === 1) return pricing.price_1_pre_vat;
+  if (passengers === 2) return pricing.price_2_pre_vat;
   return 0;
 }
 
-export function calculateGroupPrice(totalPassengers: number) {
-  return calculateBookingPrice(totalPassengers, "group");
+export function calculateGroupPrice(totalPassengers: number, pricing: PublicPricing = DEFAULT_PUBLIC_PRICING) {
+  return calculateBookingPrice(totalPassengers, "group", pricing);
 }
 
-export function calculateBookingPrice(totalPassengers: number, mode: BookingMode = "group") {
+export function calculateBookingPrice(
+  totalPassengers: number,
+  mode: BookingMode = "group",
+  pricing: PublicPricing = DEFAULT_PUBLIC_PRICING
+) {
   if (mode === "individual") {
-    return Math.max(totalPassengers, 0) * BUGGY_PRICE_1_PASSENGER;
+    return Math.max(totalPassengers, 0) * pricing.price_1_pre_vat;
   }
   let remaining = Math.max(totalPassengers, 0);
   let total = 0;
   while (remaining > 0) {
     const onBike = Math.min(MAX_PASSENGERS_PER_BIKE, remaining);
-    total += calculateBuggyPrice(onBike);
+    total += calculateBuggyPrice(onBike, pricing);
     remaining -= onBike;
   }
   return total;
 }
 
-export function calculateSubtotal(totalPassengers: number, mode: BookingMode = "group") {
-  return calculateBookingPrice(totalPassengers, mode);
+export function calculateSubtotal(
+  totalPassengers: number,
+  mode: BookingMode = "group",
+  pricing: PublicPricing = DEFAULT_PUBLIC_PRICING
+) {
+  return calculateBookingPrice(totalPassengers, mode, pricing);
 }
 
-export function calculateTax(subtotal: number) {
-  return Math.round(subtotal * TAX_RATE * 100) / 100;
+export function calculateTax(subtotal: number, vatPercent: number = DEFAULT_PUBLIC_PRICING.vat_percent) {
+  return Math.round(subtotal * (vatPercent / 100) * 100) / 100;
 }
 
-export function calculateTotalWithTax(subtotal: number) {
-  return Math.round((subtotal + calculateTax(subtotal)) * 100) / 100;
+export function calculateTotalWithTax(subtotal: number, vatPercent: number = DEFAULT_PUBLIC_PRICING.vat_percent) {
+  return Math.round((subtotal + calculateTax(subtotal, vatPercent)) * 100) / 100;
 }
 
-export function calculateBookingTotal(totalPassengers: number, mode: BookingMode = "group") {
-  const subtotal = calculateSubtotal(totalPassengers, mode);
-  return calculateTotalWithTax(subtotal);
+export function calculateBookingTotal(
+  totalPassengers: number,
+  mode: BookingMode = "group",
+  pricing: PublicPricing = DEFAULT_PUBLIC_PRICING
+) {
+  const subtotal = calculateSubtotal(totalPassengers, mode, pricing);
+  return calculateTotalWithTax(subtotal, pricing.vat_percent);
 }
 
 export function maxPassengersForAvailableBikes(availableBikes: number, mode: BookingMode) {
@@ -589,6 +619,7 @@ export const api = {
   getFleetAvailability: (date: string, time: string) =>
     request<FleetAvailabilityResponse>(`/api/availability/fleet?date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}`),
   getSiteContent: () => request<SiteContent>("/api/site-content"),
+  getPricing: () => request<PublicPricing>("/api/pricing"),
   getGallery: () => request<MediaAsset[]>("/api/gallery"),
   checkAvailability: (params: URLSearchParams) =>
     request<{ available: boolean; available_count: number; total_bikes: number; message: string }>(`/api/availability?${params.toString()}`),

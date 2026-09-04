@@ -16,6 +16,7 @@ import { BookingSummaryCard, BookingWidget } from "../components/Booking";
 import { FeatureIcon, PageShell } from "../components/Layout";
 
 import { defaultBookingSelection, loadBookingDraft, saveBookingDraft } from "../lib/bookingDraft";
+import { usePricing } from "../lib/pricingContext";
 import { publicFromPrice } from "../lib/pricingDisplay";
 import { isVideoUrl, resolveMediaUrl } from "../lib/mediaUrl";
 import { buildHowSteps, pickSiteText } from "../lib/siteContent";
@@ -88,6 +89,7 @@ function readHowItems(value: unknown): Array<{ title: string; text: string }> {
 export default function HomePage() {
 
   const { t, i18n } = useTranslation();
+  const pricing = usePricing();
 
   const isAr = i18n.language === "ar";
 
@@ -401,11 +403,11 @@ export default function HomePage() {
 
                       <p className="text-3xl font-black text-forest-400">
 
-                        {t("routes.priceFrom", { amount: publicFromPrice().toFixed(2) })}
+                        {t("routes.priceFrom", { amount: publicFromPrice(pricing).toFixed(2) })}
 
                       </p>
 
-                      <p className="mt-1 text-xs text-white/50">{t("routes.priceFromNote")}</p>
+                      <p className="mt-1 text-xs text-white/50">{t("routes.priceFromNote", { percent: pricing.vat_percent })}</p>
 
                       <p className="mt-1 flex items-center justify-end gap-1 text-sm text-white/60">
 

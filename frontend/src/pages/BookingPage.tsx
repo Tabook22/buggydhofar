@@ -8,6 +8,7 @@ import { BookingSelection, BookingSummaryCard, BookingWidget, calculateTotal } f
 import { LiabilityWaiver } from "../components/LiabilityWaiver";
 import { PageShell } from "../components/Layout";
 import { defaultBookingSelection, clearBookingDraft, isBookingSelectionReady, resolveInitialBookingSelection, saveBookingDraft } from "../lib/bookingDraft";
+import { usePricing } from "../lib/pricingContext";
 import {
   clearBookingSession,
   clearPaymentCompleting,
@@ -31,6 +32,7 @@ const ONLINE_PAYMENT_METHOD = "visa";
 
 export default function BookingPage() {
   const { t, i18n } = useTranslation();
+  const pricing = usePricing();
   const location = useLocation();
   const navigate = useNavigate();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -298,7 +300,7 @@ export default function BookingPage() {
       passengers: selection.passengers,
       booking_mode: selection.bookingMode,
       group_type: selection.bookingMode === "group" ? selection.groupType || null : null,
-      total_price: appliedPromo?.valid ? appliedPromo.total_price : calculateTotal(selection),
+      total_price: appliedPromo?.valid ? appliedPromo.total_price : calculateTotal(selection, pricing),
       promo_code: appliedPromo?.valid ? appliedPromo.code : undefined,
       payment_method: ONLINE_PAYMENT_METHOD,
       waiver_accepted: true,

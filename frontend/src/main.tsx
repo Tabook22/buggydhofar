@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { PricingProvider } from "./lib/pricingContext";
 import { SiteContentProvider } from "./lib/siteContentContext";
 import { ThemeProvider } from "./lib/themeContext";
 import "./i18n";
@@ -14,7 +15,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <ThemeProvider>
           <SiteContentProvider>
-            <App />
+            <PricingProvider>
+              <App />
+            </PricingProvider>
           </SiteContentProvider>
         </ThemeProvider>
       </BrowserRouter>

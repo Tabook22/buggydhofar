@@ -1,28 +1,22 @@
-import {
-  BUGGY_PRICE_1_PASSENGER,
-  BUGGY_PRICE_2_PASSENGERS,
-  calculateTotalWithTax,
-  TAX_PERCENT
-} from "../api/client";
+import { DEFAULT_PUBLIC_PRICING, PublicPricing } from "../api/client";
 
-export function soloPassengerTotal() {
-  return calculateTotalWithTax(BUGGY_PRICE_1_PASSENGER);
+export function soloPassengerTotal(pricing: PublicPricing = DEFAULT_PUBLIC_PRICING) {
+  return pricing.price_1_incl_vat;
 }
 
-export function pairSharingTotal() {
-  return calculateTotalWithTax(BUGGY_PRICE_2_PASSENGERS);
+export function pairSharingTotal(pricing: PublicPricing = DEFAULT_PUBLIC_PRICING) {
+  return pricing.price_2_incl_vat;
 }
 
-export function publicFromPrice() {
-  return soloPassengerTotal();
+export function publicFromPrice(pricing: PublicPricing = DEFAULT_PUBLIC_PRICING) {
+  return soloPassengerTotal(pricing);
 }
 
-export function pricingNoteValues() {
-  const pairTotal = pairSharingTotal();
+export function pricingNoteValues(pricing: PublicPricing = DEFAULT_PUBLIC_PRICING) {
   return {
-    solo: soloPassengerTotal(),
-    pairEach: pairTotal / 2,
-    pairTotal,
-    taxPercent: TAX_PERCENT
+    solo: pricing.price_1_incl_vat,
+    pairEach: pricing.price_2_incl_vat / 2,
+    pairTotal: pricing.price_2_incl_vat,
+    taxPercent: pricing.vat_percent
   };
 }

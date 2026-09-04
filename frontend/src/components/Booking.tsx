@@ -12,14 +12,16 @@ import {
   calculateSubtotal,
   calculateTax,
   calculateTotalWithTax,
+  DEFAULT_PUBLIC_PRICING,
   FleetUnitAvailability,
   maxPassengersForAvailableBikes,
+  PublicPricing,
   RouteExperience,
-  TAX_PERCENT,
   Vehicle
 } from "../api/client";
 import { FleetBikeGrid } from "./FleetBikeGrid";
 import { isBookingSelectionReady, saveBookingDraft } from "../lib/bookingDraft";
+import { usePricing } from "../lib/pricingContext";
 import { pricingNoteValues } from "../lib/pricingDisplay";
 
 export type BookingSelection = {
@@ -33,15 +35,15 @@ export type BookingSelection = {
   groupType: GroupType | "";
 };
 
-export function calculateTotal(selection: BookingSelection) {
+export function calculateTotal(selection: BookingSelection, pricing: PublicPricing = DEFAULT_PUBLIC_PRICING) {
   if (!selection.fleetUnitIds.length) return 0;
-  return calculateBookingTotal(selection.passengers, selection.bookingMode);
+  return calculateBookingTotal(selection.passengers, selection.bookingMode, pricing);
 }
 
-export function bookingPriceSummary(selection: BookingSelection) {
-  const subtotal = calculateSubtotal(selection.passengers, selection.bookingMode);
-  const tax = calculateTax(subtotal);
-  const total = calculateTotalWithTax(subtotal);
+export function bookingPriceSummary(selection: BookingSelection, pricing: PublicPricing = DEFAULT_PUBLIC_PRICING) {
+  const subtotal = calculateSubtotal(selection.passengers, selection.bookingMode, pricing);
+  const tax = calculateTax(subtotal, pricing.vat_percent);
+  const total = calculateTotalWithTax(subtotal, pricing.vat_percent);
   return { subtotal, tax, total };
 }
 
@@ -92,10 +94,11 @@ export function BookingSummaryCard({
   appliedPromo?: AppliedPromo | null;
 }) {
   const { t, i18n } = useTranslation();
+  const pricing = usePricing();
   const [fleetUnits, setFleetUnits] = useState<FleetUnitAvailability[]>([]);
   const vehicle = vehicles.find((item) => item.id === selection.vehicleId);
   const route = routes.find((item) => item.id === selection.routeId);
-  const prices = bookingPriceSummary(selection);
+  const prices = bookingPriceSummary(selection, pricing);
   const summary = appliedPromo ?? {
     subtotal: prices.subtotal,
     discount_amount: 0,
@@ -185,7 +188,7 @@ export function BookingSummaryCard({
               </div>
             )}
             <div className="flex justify-between gap-4 border-b border-white/10 pb-3 text-sm">
-              <dt className="text-white/60">{t("booking.tax", { percent: TAX_PERCENT })}</dt>
+              <dt className="text-white/60">{t("booking.tax", { percent: pricing.vat_percent })}</dt>
               <dd className="font-semibold">
                 {summary.tax.toFixed(2)} {t("booking.omr")}
               </dd>
@@ -199,12 +202,12 @@ export function BookingSummaryCard({
           </dd>
         </div>
         {selection.fleetUnitIds.length > 0 && (
-          <p className="mt-2 text-xs text-white/45">{t("booking.taxNote", { percent: TAX_PERCENT })}</p>
+          <p className="mt-2 text-xs text-white/45">{t("booking.taxNote", { percent: pricing.vat_percent })}</p>
         )}
       </dl>
       {vehicle && (
         <p className="mt-4 text-xs text-white/45">
-          {t("booking.pricingNote", pricingNoteValues())}
+          {t("booking.pricingNote", pricingNoteValues(pricing))}
         </p>
       )}
       {showButton &&

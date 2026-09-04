@@ -123,7 +123,15 @@ export function isSuperAdminSession(session: AdminSession | null): boolean {
   return session.is_super_admin || session.role === "super_admin";
 }
 
+export function canManagePricing(session: AdminSession | null): boolean {
+  if (!session) return false;
+  if (isSuperAdminSession(session)) return true;
+  if (session.role === "normal") return false;
+  return hasFullStaffPermissions(session.permissions);
+}
+
 export function canViewTab(session: AdminSession | null, tabId: string): boolean {
+  if (tabId === "pricing") return canManagePricing(session);
   const module = TAB_MODULE_MAP[tabId];
   if (!module) return false;
   if (module === "users") return isSuperAdminSession(session);

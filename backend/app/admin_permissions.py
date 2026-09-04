@@ -136,6 +136,42 @@ def require_any_permission(modules: tuple[str, ...], action: str):
     return _dependency
 
 
+STAFF_MODULES = tuple(module for module in MODULES if module != "users")
+
+
+def has_full_staff_permissions(admin: models.Admin) -> bool:
+    """True for the super admin, or an admin with every staff module fully enabled."""
+    if is_super_admin(admin):
+        return True
+    role = getattr(admin, "role", None) or ROLE_ADMIN
+    if role != ROLE_ADMIN:
+        return False
+    permissions = permissions_from_admin(admin)
+    return all(
+        bool(permissions.get(module, {}).get(action))
+        for module in STAFF_MODULES
+        for action in ACTIONS
+    )
+
+
+def can_manage_pricing(admin: models.Admin) -> bool:
+    return has_full_staff_permissions(admin)
+
+
+def require_full_permissions():
+    def _dependency(
+        admin: models.Admin = Depends(auth.get_current_admin),
+    ) -> models.Admin:
+        if not can_manage_pricing(admin):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only an administrator with full permissions can change prices and VAT.",
+            )
+        return admin
+
+    return _dependency
+
+
 def require_super_admin():
     def _dependency(
         admin: models.Admin = Depends(auth.get_current_admin),

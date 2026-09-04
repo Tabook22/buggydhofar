@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, RouteExperience } from "../api/client";
+import { usePricing } from "../lib/pricingContext";
 import { publicFromPrice } from "../lib/pricingDisplay";
 import { RealMapRoutePreview } from "../components/RealMapRoute";
 import { PageShell } from "../components/Layout";
 
 export default function ExperiencesPage() {
   const { t, i18n } = useTranslation();
+  const pricing = usePricing();
   const [routes, setRoutes] = useState<RouteExperience[]>([]);
 
   useEffect(() => {
@@ -28,9 +30,9 @@ export default function ExperiencesPage() {
                   <h2 className="text-2xl font-black">{i18n.language === "ar" ? route.name_ar : route.name_en}</h2>
                   <p className="mt-3 text-white/65">{i18n.language === "ar" ? route.description_ar : route.description_en}</p>
                   <p className="mt-5 font-bold text-forest-400">
-                    {route.duration_minutes} {t("routes.minutes")} · {t("routes.priceFrom", { amount: publicFromPrice().toFixed(2) })}
+                    {route.duration_minutes} {t("routes.minutes")} · {t("routes.priceFrom", { amount: publicFromPrice(pricing).toFixed(2) })}
                   </p>
-                  <p className="mt-1 text-xs text-white/50">{t("routes.priceFromNote")}</p>
+                  <p className="mt-1 text-xs text-white/50">{t("routes.priceFromNote", { percent: pricing.vat_percent })}</p>
                   <div className="mt-5">
                     <RealMapRoutePreview
                       route={route}

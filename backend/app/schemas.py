@@ -433,6 +433,22 @@ class AmwalAbandonRequest(BaseModel):
     force: bool = False
 
 
+class PricingSettingsOut(BaseModel):
+    price_1_incl_vat: float
+    price_2_incl_vat: float
+    vat_percent: float
+    price_1_pre_vat: float
+    price_2_pre_vat: float
+    price_1_vat_amount: float
+    price_2_vat_amount: float
+
+
+class PricingSettingsUpdate(BaseModel):
+    price_1_incl_vat: float = Field(..., ge=0.5, le=10000)
+    price_2_incl_vat: float = Field(..., ge=0.5, le=10000)
+    vat_percent: float = Field(..., ge=0, le=100)
+
+
 class AdminModulePermissions(BaseModel):
     view: bool = False
     create: bool = False
