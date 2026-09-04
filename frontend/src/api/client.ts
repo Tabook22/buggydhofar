@@ -406,8 +406,10 @@ export function groupTypeDetailRow(
   return [t("booking.groupType"), groupTypeLabel(type, language)];
 }
 
-export const BUGGY_PRICE_1_PASSENGER = 16.5;
-export const BUGGY_PRICE_2_PASSENGERS = 26.5;
+// Advertised totals including 5% VAT: 16.50 (1 person) and 26.50 (2 sharing).
+// These constants are pre-VAT so the checkout tax line adds up exactly.
+export const BUGGY_PRICE_1_PASSENGER = 15.71; // 16.50 incl. 5% VAT
+export const BUGGY_PRICE_2_PASSENGERS = 25.24; // 26.50 incl. 5% VAT
 export const BUGGY_PRICE_PER_PASSENGER_2 = BUGGY_PRICE_2_PASSENGERS / 2;
 export const MAX_PASSENGERS_PER_BIKE = 2;
 export const MAX_GROUP_PASSENGERS = 40;
