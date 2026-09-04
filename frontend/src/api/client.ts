@@ -406,8 +406,9 @@ export function groupTypeDetailRow(
   return [t("booking.groupType"), groupTypeLabel(type, language)];
 }
 
-export const BUGGY_PRICE_1_PASSENGER = 20;
-export const BUGGY_PRICE_PER_PASSENGER_2 = 15;
+export const BUGGY_PRICE_1_PASSENGER = 16.5;
+export const BUGGY_PRICE_2_PASSENGERS = 26.5;
+export const BUGGY_PRICE_PER_PASSENGER_2 = BUGGY_PRICE_2_PASSENGERS / 2;
 export const MAX_PASSENGERS_PER_BIKE = 2;
 export const MAX_GROUP_PASSENGERS = 40;
 export const TAX_RATE = 0.05;
@@ -425,7 +426,7 @@ export function bikesRequiredForPassengers(passengers: number, mode: BookingMode
 
 export function calculateBuggyPrice(passengers: number) {
   if (passengers === 1) return BUGGY_PRICE_1_PASSENGER;
-  if (passengers === 2) return BUGGY_PRICE_PER_PASSENGER_2 * 2;
+  if (passengers === 2) return BUGGY_PRICE_2_PASSENGERS;
   return 0;
 }
 

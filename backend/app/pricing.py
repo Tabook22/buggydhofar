@@ -3,8 +3,9 @@
 import math
 from datetime import date as date_cls
 
-PRICE_1_PASSENGER = 20.0
-PRICE_PER_PASSENGER_2 = 15.0
+PRICE_1_PASSENGER = 16.5
+PRICE_2_PASSENGERS = 26.5
+PRICE_PER_PASSENGER_2 = PRICE_2_PASSENGERS / 2  # 13.25 OMR each when sharing
 MAX_PASSENGERS_PER_BIKE = 2
 MAX_GROUP_PASSENGERS = 40
 
@@ -113,7 +114,7 @@ def calculate_buggy_price(passengers: int) -> float:
     if passengers == 1:
         return PRICE_1_PASSENGER
     if passengers == 2:
-        return PRICE_PER_PASSENGER_2 * 2
+        return PRICE_2_PASSENGERS
     raise ValueError(f"Each bike holds 1 or 2 passengers, got {passengers}")
 
 

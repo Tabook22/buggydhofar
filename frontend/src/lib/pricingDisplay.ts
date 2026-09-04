@@ -1,5 +1,6 @@
 import {
   BUGGY_PRICE_1_PASSENGER,
+  BUGGY_PRICE_2_PASSENGERS,
   BUGGY_PRICE_PER_PASSENGER_2,
   calculateTotalWithTax,
   TAX_PERCENT
@@ -10,7 +11,7 @@ export function soloPassengerTotal() {
 }
 
 export function pairSharingTotal() {
-  return calculateTotalWithTax(BUGGY_PRICE_PER_PASSENGER_2 * 2);
+  return calculateTotalWithTax(BUGGY_PRICE_2_PASSENGERS);
 }
 
 export function publicFromPrice() {
@@ -21,7 +22,7 @@ export function pricingNoteValues() {
   return {
     solo: BUGGY_PRICE_1_PASSENGER,
     pairEach: BUGGY_PRICE_PER_PASSENGER_2,
-    pairTotal: BUGGY_PRICE_PER_PASSENGER_2 * 2,
+    pairTotal: BUGGY_PRICE_2_PASSENGERS,
     taxPercent: TAX_PERCENT
   };
 }
